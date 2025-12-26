@@ -8,9 +8,11 @@ Lets you set speeds up to 8x and remembers preset speed when you return to the p
 A powerful Tampermonkey userscript that replaces the standard YouTube playback speed menu with a high-precision control panel. It integrates seamlessly into the native YouTube settings UI, allowing playback speeds from **0.1x up to 8.0x**.
 
 <img width="540" height="1205" alt="New UI" src="https://github.com/user-attachments/assets/7d9163f2-9407-4f4f-9c28-8739b769811f" />
+
 UI after script
 
 <img width="540" height="1205" alt="Before Script" src="https://github.com/user-attachments/assets/7b6b51ec-2436-4121-9794-4e16dc0f4be4" />
+
 UI before script
 
 ## ✨ Features
