@@ -1,72 +1,58 @@
-# youtubeSpeedSetAndRemember
-Lets you set speeds up to 8x and remembers preset speed when you return to the page.
+# YouTube Speed Controller
 
-# 🚀 YouTube Native Speed Menu Hack
+A lightweight Tampermonkey userscript that remembers your YouTube playback speed across sessions, adds keyboard shortcuts on desktop, and provides a long-press 2x boost for Shorts on mobile.
 
-![Version](https://img.shields.io/badge/version-7.0-blue.svg) ![YouTube](https://img.shields.io/badge/YouTube-Compatible-red.svg) ![Tampermonkey](https://img.shields.io/badge/Tampermonkey-Supported-green.svg)
+## Features
 
-A powerful Tampermonkey userscript that replaces the standard YouTube playback speed menu with a high-precision control panel. It integrates seamlessly into the native YouTube settings UI, allowing playback speeds from **0.1x up to 8.0x**.
+- **Speed persistence** — Your chosen speed is saved and automatically applied to every video, across tabs and sessions. Uses Tampermonkey's `GM_setValue`/`GM_getValue` (no localStorage).
+- **Desktop keyboard shortcuts** — `[` decreases speed by 0.25x, `]` increases by 0.25x. Works on any YouTube page. Won't fire when typing in search or comments.
+- **Shorts long-press 2x** — On mobile (touch devices), long-press the **left half** of the screen during a Short to temporarily boost to 2x. Release to return to your saved speed. Right side is untouched — YouTube's native behavior works normally.
+- **Ad-aware** — Doesn't fight YouTube's ad playback rate. Re-applies your speed when the ad ends.
+- **SPA-aware** — Handles YouTube's single-page navigation (no page reloads between videos) via `yt-navigate-finish` event and MutationObserver.
+- **Speed range** — 0.25x to 4.0x in 0.25x increments.
 
-<img width="540" height="1205" alt="New UI" src="https://github.com/user-attachments/assets/7d9163f2-9407-4f4f-9c28-8739b769811f" />
+## Installation
 
-UI after script
+1. Install [Tampermonkey](https://www.tampermonkey.net/) (Chrome, Firefox, Edge) or [Firefox for Android](https://addons.mozilla.org/en-US/android/addon/tampermonkey/) for mobile.
+2. **[Click here to install the script](https://raw.githubusercontent.com/npezarro/youtubeSpeedSetAndRemember/main/script.js)** — Tampermonkey will prompt you to install it.
+3. Or: open Tampermonkey → Create new script → paste the contents of `script.js` → save.
 
-<img width="540" height="1205" alt="Before Script" src="https://github.com/user-attachments/assets/7b6b51ec-2436-4121-9794-4e16dc0f4be4" />
+The script auto-updates from this repo via `@updateURL`.
 
-UI before script
+## Usage
 
-## ✨ Features
+### Desktop
+- **`]`** — increase speed by 0.25x
+- **`[`** — decrease speed by 0.25x
+- A brief overlay shows the current speed when you change it.
+- Your speed persists across videos and sessions.
 
-* **Integrated UI:** Does not create ugly floating boxes. It completely replaces the contents of the native "Playback speed" settings submenu.
-* **Granular Slider:** Precision control slider ranging from `0.1x` to `8.0x`.
-* **Quick-Select Buttons:** Preset buttons for common speeds (`0.25x`, `0.5x`, `1x`, `1.25x`, `1.5x`, `2x`, `2.5x`, `3x`, `4x`).
-* **Speed Persistence:** Includes a **"Remember Speed"** toggle switch.
-    * **On (Default):** YouTube will automatically apply your last used speed to every new video you watch.
-    * **Off:** Videos start at normal speed, but the slider remains available for manual adjustment.
-* **Smart Labeling:** Updates the main Settings menu label to show the exact speed (e.g., `3.45x`) instead of the generic "Custom".
-* **TrustedHTML Safe:** Uses strict DOM creation methods to bypass YouTube's security policies and prevent console errors.
-* **Aggressive Persistence:** Uses `MutationObservers` to ensure the controls stay visible even when YouTube dynamically re-renders the player.
+### Mobile (Shorts)
+- **Long-press left side** (400ms) — temporarily plays at 2x with a small "2x" indicator.
+- **Release** — returns to your saved speed.
+- Moving your finger more than 15px cancels the long-press (so scrolling still works).
+- Right side of the screen uses YouTube's native long-press behavior.
 
-## 📥 Installation
+### All platforms
+- Speed is applied automatically when a new video loads.
+- Changing speed via YouTube's native menu also gets persisted.
 
-1.  **Install a Userscript Manager:**
-    * [Tampermonkey](https://www.tampermonkey.net/) (Recommended for Chrome/Edge/Firefox)
-    * [Violentmonkey](https://violentmonkey.github.io/)
+## How It Works
 
-2.  **Add the Script:**
-    * Click on the Tampermonkey icon in your browser.
-    * Select **"Create a new script..."**.
-    * Delete any default code and paste the content of `script.js` (or the latest version provided).
-    * Press `Ctrl+S` or `Cmd+S` to save.
+- **MutationObserver** on `document.body` watches for new `<video>` elements (YouTube swaps them during SPA navigation and Shorts swiping).
+- **`ratechange` listener** (debounced 150ms) persists speed changes, with guards to skip ad-triggered rate changes and prevent feedback loops.
+- **`yt-navigate-finish`** event listener handles YouTube's SPA page transitions.
+- **WeakSet** tracks processed video elements to avoid duplicate listener attachment — no cleanup needed since listeners are GC'd with the element.
 
-## 🎮 How to Use
+## Compatibility
 
-1.  Open any YouTube video.
-2.  Click the **Settings (Gear Icon)** ⚙️ in the video player.
-3.  Click on **Playback speed**.
-4.  You will see the new **Speed Control** interface:
-    * **Slider:** Drag to set any speed between 0.1x and 8x.
-    * **Buttons:** Click for instant preset speeds.
-    * **Toggle:** Switch "Remember speed" on or off.
+| Platform | Browser | Status |
+|----------|---------|--------|
+| Desktop | Chrome + Tampermonkey | Full support |
+| Desktop | Firefox + Tampermonkey | Full support |
+| Android | Firefox + Tampermonkey | Full support |
+| iOS | Safari + Userscripts | Not supported (different API) |
 
-## 🛠 Technical Details
+## License
 
-YouTube uses a complex Single Page Application (SPA) architecture (Polymer/Lit) and strict Content Security Policies (Trusted Types).
-
-* **Bypassing TrustedHTML:** This script avoids `.innerHTML` entirely, using `document.createElement` to build the UI programmatically.
-* **Handling Re-renders:** YouTube frequently wipes the settings menu DOM. This script uses a `MutationObserver` to detect when the speed menu is opened and immediately re-injects the custom controls before the user notices.
-* **State Management:** Speed preferences are stored in the browser's `localStorage` (`yt-custom-speed-value` and `yt-custom-speed-remember`).
-
-## 🤝 Troubleshooting
-
-* **The menu disappeared:** Close the settings menu and open it again. The observer usually re-attaches immediately.
-* **Video stuttering:** Speeds above 4x may cause buffering or stuttering depending on your internet connection and computer hardware.
-* **Script not loading:** Ensure Tampermonkey is enabled and the script is toggled "On".
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-*Disclaimer: This script is not affiliated with or endorsed by YouTube or Google.*
+MIT
