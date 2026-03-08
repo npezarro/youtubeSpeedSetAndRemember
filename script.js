@@ -1,375 +1,304 @@
 // ==UserScript==
-// @name         YouTube Native Speed Menu HACK v8 (Desktop & Mobile)
-// @namespace    http://tampermonkey.net/
-// @version      8.0
-// @description  Persists playback speed (0.1x-8x) and overrides the settings menu on both Desktop and Mobile YouTube.
-// @author       Gemini
-// @match        https://www.youtube.com/*
-// @match        https://m.youtube.com/*
-// @grant        none
+// @name         YouTube Speed Controller
+// @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
+// @version      9.0
+// @description  Persists playback speed across sessions. Desktop keyboard shortcuts ([ / ]). Mobile Shorts long-press left side for 2x.
+// @author       npezarro
+// @match        *://www.youtube.com/*
+// @match        *://m.youtube.com/*
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_addStyle
+// @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/npezarro/youtubeSpeedSetAndRemember/main/script.js
+// @downloadURL  https://raw.githubusercontent.com/npezarro/youtubeSpeedSetAndRemember/main/script.js
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
-    const IS_MOBILE = window.location.hostname === 'm.youtube.com';
-    console.log(`[YT-Speed-v8] Initialized (${IS_MOBILE ? 'Mobile' : 'Desktop'} Mode)`);
+    // --- Config ---
+    const SPEED_KEY = 'yt_speed';
+    const DEFAULT_SPEED = 1.0;
+    const MIN_SPEED = 0.25;
+    const MAX_SPEED = 4.0;
+    const SPEED_STEP = 0.25;
+    const LONG_PRESS_MS = 400;
+    const LONG_PRESS_2X = 2.0;
+    const MOVE_THRESHOLD = 15;
 
-    // --- Configuration ---
-    const CONFIG = {
-        min: 0.1,
-        max: 8.0,
-        step: 0.1,
-        tranches: [0.25, 0.5, 1, 1.25, 1.5, 2, 2.5, 3, 4],
-        storageKeySpeed: 'yt-custom-speed-value',
-        storageKeyEnabled: 'yt-custom-speed-remember'
-    };
-
-    const CUSTOM_CONTAINER_ID = 'yt-custom-speed-injected';
-
-    // --- CSS ---
-    const STYLES = `
-        /* Common Slider */
-        #${CUSTOM_CONTAINER_ID} input[type=range] {
-            width: 100%;
-            cursor: pointer;
-            margin: 10px 0;
-            accent-color: #ff0000;
-        }
-
-        /* Container Adjustments */
-        #${CUSTOM_CONTAINER_ID} {
-            padding: 12px 15px;
-            color: #eee;
-            font-family: Roboto, Arial, sans-serif;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-
-        /* Mobile specific adjustments */
-        .mobile-mode #${CUSTOM_CONTAINER_ID} {
-            background-color: #212121; /* Match mobile sheet bg */
-            padding: 20px;
-        }
-
-        /* Toggle Switch */
-        .yt-speed-toggle-wrapper {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 13px;
-            color: #ccc;
-            margin-top: 12px;
-        }
-
-        .yt-speed-toggle {
-            position: relative;
-            display: inline-block;
-            width: 34px;
-            height: 18px;
-        }
-
-        .yt-speed-toggle input { opacity: 0; width: 0; height: 0; }
-
-        .yt-speed-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #555;
-            transition: .2s;
-            border-radius: 34px;
-        }
-
-        .yt-speed-slider:before {
-            position: absolute;
-            content: "";
-            height: 14px;
-            width: 14px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .2s;
-            border-radius: 50%;
-        }
-
-        input:checked + .yt-speed-slider { background-color: #ff0000; }
-        input:checked + .yt-speed-slider:before { transform: translateX(16px); }
-    `;
-
-    function injectStyles() {
-        if (document.getElementById('yt-speed-hack-styles')) return;
-        const style = document.createElement('style');
-        style.id = 'yt-speed-hack-styles';
-        style.textContent = STYLES;
-        document.head.appendChild(style);
-        if (IS_MOBILE) document.body.classList.add('mobile-mode');
+    // --- Storage ---
+    function getSpeed() {
+        const val = parseFloat(GM_getValue(SPEED_KEY, DEFAULT_SPEED));
+        if (isNaN(val)) return DEFAULT_SPEED;
+        return Math.min(MAX_SPEED, Math.max(MIN_SPEED, val));
     }
 
-    // --- State Management ---
-    function saveState(speed) {
-        const isEnabled = getState().remember;
-        if (isEnabled) {
-            localStorage.setItem(CONFIG.storageKeySpeed, speed);
+    function setSpeed(rate) {
+        const clamped = Math.min(MAX_SPEED, Math.max(MIN_SPEED, rate));
+        GM_setValue(SPEED_KEY, clamped);
+        return clamped;
+    }
+
+    // --- Ad detection ---
+    function isAdPlaying() {
+        return !!(document.querySelector('.ad-showing') || document.querySelector('.ad-interrupting'));
+    }
+
+    // --- Video lifecycle ---
+    const trackedVideos = new WeakSet();
+    let isApplyingSpeed = false;
+    let debounceTimer = null;
+
+    function applySpeed(video) {
+        const speed = getSpeed();
+        if (Math.abs(video.playbackRate - speed) > 0.01) {
+            isApplyingSpeed = true;
+            video.playbackRate = speed;
+            // Reset guard after a tick so the ratechange handler doesn't loop
+            setTimeout(() => { isApplyingSpeed = false; }, 50);
         }
     }
 
-    function getState() {
-        const rawEnabled = localStorage.getItem(CONFIG.storageKeyEnabled);
-        const isEnabled = rawEnabled === null ? true : rawEnabled === 'true';
-        return {
-            speed: parseFloat(localStorage.getItem(CONFIG.storageKeySpeed) || '1.0'),
-            remember: isEnabled
-        };
-    }
-
-    // --- DOM Creation ---
-    function create(tag, styles = {}, text = null) {
-        const el = document.createElement(tag);
-        Object.assign(el.style, styles);
-        if (text) el.textContent = text;
-        return el;
-    }
-
-    // --- Label Updater (Desktop & Mobile) ---
-    function updateLabels(speed) {
-        const speedTxt = parseFloat(speed).toFixed(2) + 'x';
-
-        // Desktop Label
-        const desktopMenu = document.querySelector('.ytp-settings-menu');
-        if (desktopMenu) {
-            const items = Array.from(desktopMenu.querySelectorAll('.ytp-menuitem'));
-            const speedItem = items.find(i => i.textContent.includes('Playback speed') || i.textContent.includes('Speed'));
-            if (speedItem) {
-                const content = speedItem.querySelector('.ytp-menuitem-content');
-                if (content) content.textContent = speedTxt;
+    function onRateChange(video) {
+        if (isApplyingSpeed) return;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            if (isAdPlaying()) {
+                // Ad changed the rate — re-apply after ad ends (observer will catch it)
+                return;
             }
-        }
+            // User or YouTube changed the rate — persist it
+            const current = video.playbackRate;
+            if (current >= MIN_SPEED && current <= MAX_SPEED) {
+                setSpeed(current);
+            }
+        }, 150);
+    }
 
-        // Mobile Label (Usually inside a list item view model)
-        if (IS_MOBILE) {
-            // Mobile is trickier, it usually just shows "Speed" and then the value on the right
-            // We look for elements containing "Speed" and update their sibling or child values
-            const sheet = document.querySelector('.yt-spec-bottom-sheet-layout');
-            if (sheet) {
-                // This is loose logic because mobile classes are messy, but usually works
-                const items = Array.from(sheet.querySelectorAll('yt-list-item-view-model, .group-item'));
-                const speedEntry = items.find(i => i.textContent.includes('Speed'));
-                if (speedEntry) {
-                   // Try to find the secondary text container
-                   const secondary = speedEntry.querySelector('.yt-list-item-view-model__secondary'); // Common mobile class
-                   if (secondary) secondary.textContent = speedTxt;
+    function trackVideo(video) {
+        if (trackedVideos.has(video)) return;
+        trackedVideos.add(video);
+        video.addEventListener('ratechange', () => onRateChange(video));
+        if (!isAdPlaying()) {
+            applySpeed(video);
+        }
+    }
+
+    // --- MutationObserver: watch for new <video> elements ---
+    function scanForVideos(root) {
+        if (root.nodeName === 'VIDEO') {
+            trackVideo(root);
+        }
+        if (root.querySelectorAll) {
+            root.querySelectorAll('video').forEach(trackVideo);
+        }
+    }
+
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    scanForVideos(node);
                 }
             }
         }
-    }
+    });
 
-    // --- Custom UI Injection ---
-    function injectCustomControls(containerEl, video) {
-        // Hide Native Items
-        // Desktop: .ytp-menuitem
-        // Mobile: yt-list-item-view-model OR .group-item depending on version
-        const itemSelector = IS_MOBILE ? 'yt-list-item-view-model, .group-item, a[role="radio"]' : '.ytp-menuitem';
-        const nativeItems = Array.from(containerEl.querySelectorAll(itemSelector));
+    observer.observe(document.body, { childList: true, subtree: true });
 
-        nativeItems.forEach(item => {
-            if (item.style.display !== 'none') item.style.display = 'none';
-        });
+    // Catch any video already in the DOM
+    document.querySelectorAll('video').forEach(trackVideo);
 
-        // Prevention check
-        if (document.getElementById(CUSTOM_CONTAINER_ID)) {
-            // Just sync values
-            const slider = document.querySelector(`#${CUSTOM_CONTAINER_ID} input[type="range"]`);
-            const display = document.querySelector(`#${CUSTOM_CONTAINER_ID} .speed-display`);
-            if (slider && display && document.activeElement !== slider) {
-                slider.value = video.playbackRate;
-                display.textContent = video.playbackRate.toFixed(2) + 'x';
-            }
+    // --- SPA navigation: YouTube fires this on page transitions ---
+    document.addEventListener('yt-navigate-finish', () => {
+        // Small delay — YouTube may not have the new video element ready immediately
+        setTimeout(() => {
+            document.querySelectorAll('video').forEach(trackVideo);
+        }, 300);
+    });
+
+    // --- Desktop keyboard shortcuts ---
+    // [ = decrease speed, ] = increase speed
+    document.addEventListener('keydown', (e) => {
+        // Don't fire when typing in an input
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) {
             return;
         }
 
-        console.log("[YT-Speed-v8] Injecting UI...");
+        let delta = 0;
+        if (e.key === '[') delta = -SPEED_STEP;
+        else if (e.key === ']') delta = SPEED_STEP;
+        else return;
 
-        const wrapper = create('div');
-        wrapper.id = CUSTOM_CONTAINER_ID;
+        e.preventDefault();
+        e.stopPropagation();
 
-        // 1. Header/Slider
-        const labelRow = create('div', { display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' });
-        labelRow.appendChild(create('span', {}, 'Custom Speed'));
-        const valueDisplay = create('span', { fontWeight: 'bold', color: '#fff' }, video.playbackRate.toFixed(2) + 'x');
-        valueDisplay.className = 'speed-display';
-        labelRow.appendChild(valueDisplay);
-
-        const slider = create('input');
-        slider.type = 'range';
-        slider.min = CONFIG.min;
-        slider.max = CONFIG.max;
-        slider.step = CONFIG.step;
-        slider.value = video.playbackRate;
-
-        slider.addEventListener('input', (e) => {
-            e.stopPropagation();
-            const val = parseFloat(e.target.value);
-            video.playbackRate = val;
-            valueDisplay.textContent = val.toFixed(2) + 'x';
-            saveState(val);
+        const newSpeed = setSpeed(getSpeed() + delta);
+        // Apply to all active videos
+        document.querySelectorAll('video').forEach((v) => {
+            isApplyingSpeed = true;
+            v.playbackRate = newSpeed;
+            setTimeout(() => { isApplyingSpeed = false; }, 50);
         });
 
-        // Mobile touch event stop
-        slider.addEventListener('touchmove', (e) => e.stopPropagation());
+        showSpeedIndicator(newSpeed);
+    });
 
-        wrapper.appendChild(labelRow);
-        wrapper.appendChild(slider);
-
-        // 2. Buttons Grid
-        const btnGrid = create('div', {
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)', // 4 columns
-            gap: '8px',
-            marginBottom: '15px'
-        });
-
-        CONFIG.tranches.forEach(rate => {
-            const btn = create('div', {
-                textAlign: 'center',
-                padding: IS_MOBILE ? '12px 0' : '6px 0', // Larger touch target on mobile
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                userSelect: 'none',
-            }, rate + 'x');
-
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                video.playbackRate = rate;
-                slider.value = rate;
-                valueDisplay.textContent = rate.toFixed(2) + 'x';
-                saveState(rate);
-            };
-
-            btnGrid.appendChild(btn);
-        });
-        wrapper.appendChild(btnGrid);
-
-        // 3. Toggle
-        const toggleWrapper = create('div');
-        toggleWrapper.className = 'yt-speed-toggle-wrapper';
-        toggleWrapper.appendChild(create('span', {}, 'Remember speed'));
-
-        const toggleLabel = create('label');
-        toggleLabel.className = 'yt-speed-toggle';
-        const toggleInput = create('input');
-        toggleInput.type = 'checkbox';
-        toggleInput.checked = getState().remember;
-
-        toggleInput.addEventListener('change', (e) => {
-            e.stopPropagation();
-            localStorage.setItem(CONFIG.storageKeyEnabled, e.target.checked);
-            if(e.target.checked) saveState(video.playbackRate);
-        });
-
-        const toggleSlider = create('span');
-        toggleSlider.className = 'yt-speed-slider';
-
-        toggleLabel.appendChild(toggleInput);
-        toggleLabel.appendChild(toggleSlider);
-        toggleWrapper.appendChild(toggleLabel);
-        wrapper.appendChild(toggleWrapper);
-
-        // Prepend to menu
-        if (IS_MOBILE) {
-            // On mobile we might need to append depending on container layout,
-            // but prepend usually works to keep it above scroll
-            containerEl.insertBefore(wrapper, containerEl.firstChild);
-        } else {
-            containerEl.insertBefore(wrapper, containerEl.firstChild);
+    // --- Speed indicator overlay ---
+    GM_addStyle(`
+        .yt-speed-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            font-family: YouTube Noto, Roboto, Arial, sans-serif;
+            font-size: 28px;
+            font-weight: 500;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 999999;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
         }
+        .yt-speed-indicator.visible {
+            opacity: 1;
+        }
+        .yt-speed-longpress {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            font-family: YouTube Noto, Roboto, Arial, sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 4px;
+            z-index: 999999;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .yt-speed-longpress.visible {
+            opacity: 1;
+        }
+    `);
+
+    let indicatorEl = null;
+    let indicatorTimeout = null;
+
+    function showSpeedIndicator(speed) {
+        if (!indicatorEl) {
+            indicatorEl = document.createElement('div');
+            indicatorEl.className = 'yt-speed-indicator';
+            document.body.appendChild(indicatorEl);
+        }
+        indicatorEl.textContent = speed.toFixed(2) + 'x';
+        indicatorEl.classList.add('visible');
+        clearTimeout(indicatorTimeout);
+        indicatorTimeout = setTimeout(() => {
+            indicatorEl.classList.remove('visible');
+        }, 700);
     }
 
-    // --- Detection Logic ---
+    // --- Shorts long-press (left side → 2x) ---
+    // Only activate on touch-capable devices when viewing Shorts
+    if (navigator.maxTouchPoints > 0) {
+        let longPressTimer = null;
+        let isLongPressing = false;
+        let startX = 0;
+        let startY = 0;
+        let preLongPressSpeed = DEFAULT_SPEED;
+        let longPressOverlay = null;
 
-    function getVideo() {
-        return document.querySelector('video') || document.querySelector('.html5-main-video');
-    }
+        function isOnShorts() {
+            return window.location.pathname.includes('/shorts/');
+        }
 
-    function checkMenus() {
-        const video = getVideo();
-        if (!video) return;
+        function getLongPressOverlay() {
+            if (!longPressOverlay) {
+                longPressOverlay = document.createElement('div');
+                longPressOverlay.className = 'yt-speed-longpress';
+                longPressOverlay.textContent = LONG_PRESS_2X + 'x';
+                document.body.appendChild(longPressOverlay);
+            }
+            return longPressOverlay;
+        }
 
-        if (IS_MOBILE) {
-            // --- Mobile Logic ---
-            // Mobile uses a bottom sheet usually class .yt-spec-bottom-sheet-layout__bottom-sheet-content
-            const bottomSheet = document.querySelector('.yt-spec-bottom-sheet-layout__bottom-sheet-content');
-            if (bottomSheet && bottomSheet.style.display !== 'none') {
-                // Check header
-                const header = bottomSheet.querySelector('.yt-spec-bottom-sheet-layout__header-title');
-                const title = header ? header.textContent : bottomSheet.textContent;
+        function startLongPress() {
+            isLongPressing = true;
+            const video = document.querySelector('video');
+            if (video) {
+                preLongPressSpeed = video.playbackRate;
+                isApplyingSpeed = true;
+                video.playbackRate = LONG_PRESS_2X;
+                setTimeout(() => { isApplyingSpeed = false; }, 50);
+            }
+            getLongPressOverlay().classList.add('visible');
+        }
 
-                if (title && (title.includes('Playback speed') || title.includes('Speed'))) {
-                    // This is the speed menu
-                    // On mobile, the content is usually in a scrollable div inside
-                    const contentBox = bottomSheet.querySelector('#content') || bottomSheet;
-                    injectCustomControls(contentBox, video);
-                } else {
-                    // We might be in the main menu, try to fix label
-                    updateLabels(video.playbackRate);
+        function endLongPress() {
+            if (!isLongPressing) return;
+            isLongPressing = false;
+            const video = document.querySelector('video');
+            if (video) {
+                isApplyingSpeed = true;
+                video.playbackRate = preLongPressSpeed;
+                setTimeout(() => { isApplyingSpeed = false; }, 50);
+            }
+            getLongPressOverlay().classList.remove('visible');
+        }
+
+        document.addEventListener('touchstart', (e) => {
+            if (!isOnShorts()) return;
+            if (e.touches.length !== 1) return;
+
+            const touch = e.touches[0];
+            // Left half of screen only
+            if (touch.clientX >= window.innerWidth / 2) return;
+
+            // Don't interfere with interactive elements
+            const target = e.target;
+            if (target.closest('button, a, input, textarea, [role="button"], ytd-menu-renderer')) return;
+
+            startX = touch.clientX;
+            startY = touch.clientY;
+
+            longPressTimer = setTimeout(() => {
+                startLongPress();
+            }, LONG_PRESS_MS);
+        }, { capture: true, passive: true });
+
+        document.addEventListener('touchmove', (e) => {
+            if (longPressTimer || isLongPressing) {
+                const touch = e.touches[0];
+                const dx = Math.abs(touch.clientX - startX);
+                const dy = Math.abs(touch.clientY - startY);
+                if (dx > MOVE_THRESHOLD || dy > MOVE_THRESHOLD) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                    endLongPress();
                 }
             }
-        } else {
-            // --- Desktop Logic ---
-            const settingsMenu = document.querySelector('.ytp-popup.ytp-settings-menu');
-            if (settingsMenu && settingsMenu.style.display !== 'none') {
-                const panel = settingsMenu.querySelector('.ytp-panel-menu');
-                if (panel) {
-                    const text = panel.textContent;
-                    if (text.includes('0.25') || text.includes('Normal')) {
-                        injectCustomControls(panel, video);
-                    } else {
-                        updateLabels(video.playbackRate);
-                    }
-                }
-            }
-        }
+        }, { capture: true, passive: true });
+
+        document.addEventListener('touchend', () => {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+            endLongPress();
+        }, { capture: true, passive: true });
+
+        document.addEventListener('touchcancel', () => {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+            endLongPress();
+        }, { capture: true, passive: true });
     }
 
-    // --- Initialization ---
-
-    function applySavedSpeed() {
-        const state = getState();
-        const video = getVideo();
-        if (state.remember && video) {
-            // Tolerance check to prevent unnecessary stutter
-            if (Math.abs(video.playbackRate - state.speed) > 0.05) {
-                video.playbackRate = state.speed;
-            }
-        }
-    }
-
-    function loop() {
-        const video = getVideo();
-        if (video) {
-            // Attach rate listener if missing
-            if (!video.getAttribute('data-speed-hack-attached')) {
-                video.setAttribute('data-speed-hack-attached', 'true');
-                video.addEventListener('ratechange', () => {
-                    saveState(video.playbackRate);
-                    updateLabels(video.playbackRate);
-                });
-                applySavedSpeed();
-            }
-
-            // On mobile, sometimes the video element is swapped (shorts vs normal), re-apply if needed
-            if (getState().remember && Math.abs(video.playbackRate - getState().speed) > 0.1 && !video.paused && video.currentTime > 1) {
-                // Enforcement logic for ads/playlist transitions
-                video.playbackRate = getState().speed;
-            }
-        }
-
-        checkMenus();
-    }
-
-    // Use a fast interval instead of MutationObserver for menu detection
-    // because mobile DOM changes are extremely rapid and nested.
-    injectStyles();
-    setInterval(loop, 500);
-
+    console.log('[YT-Speed] v9 loaded — stored speed:', getSpeed() + 'x');
 })();
