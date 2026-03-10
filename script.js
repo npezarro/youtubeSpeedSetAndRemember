@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      10.0
-// @description  Persists playback speed across sessions. Desktop keyboard shortcuts ([ / ]). Mobile Shorts long-press left side for 2x. Settings cog custom speed menu (0.25x–8x).
+// @version      11.0
+// @description  Persists playback speed across sessions. Desktop keyboard shortcuts ([ / ]). Mobile Shorts tap left side to toggle 2x. Settings cog custom speed menu (0.25x–8x).
 // @author       npezarro
 // @match        *://www.youtube.com/*
 // @match        *://m.youtube.com/*
@@ -24,8 +24,14 @@
     const MAX_SPEED = 8.0;
     const SPEED_STEP = 0.25;
     const LONG_PRESS_MS = 400;
-    const LONG_PRESS_2X = 2.0;
     const MOVE_THRESHOLD = 15;
+
+    // Shorts tap-to-toggle config
+    const SHORTS_SPEED_MODE  = 'tap';    // 'tap' or 'hold'
+    const SHORTS_TAP_MAX_MS  = 200;      // max touch duration to count as tap
+    const SHORTS_MOVE_PX     = 10;       // max movement to count as tap
+    const SHORTS_BOOST_SPEED = 2.0;      // speed when boost is active
+    const DOUBLETAP_GUARD_MS = 250;      // debounce window for double-tap conflict
 
     // --- Storage ---
     function getSpeed() {
@@ -168,7 +174,7 @@
             background: rgba(0, 0, 0, 0.6);
             color: #fff;
             font-family: YouTube Noto, Roboto, Arial, sans-serif;
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 500;
             padding: 4px 10px;
             border-radius: 4px;
@@ -179,6 +185,11 @@
         }
         .yt-speed-longpress.visible {
             opacity: 1;
+        }
+        .yt-speed-longpress.yt-speed-boost-active {
+            border-left: 3px solid #3ea6ff;
+            opacity: 1;
+            transition: none;
         }
 
         /* --- Settings cog custom speed panel --- */
@@ -606,39 +617,74 @@
         console.log('[YT-Speed] Settings cog interceptor initialized');
     })();
 
-    // --- Shorts long-press (left side -> 2x) ---
+    // --- Shorts speed boost (left side) ---
     if (navigator.maxTouchPoints > 0) {
-        let longPressTimer = null;
-        let isLongPressing = false;
         let startX = 0;
         let startY = 0;
+        let touchStartTime = 0;
+        let swipedAway = false;
         let preLongPressSpeed = DEFAULT_SPEED;
-        let longPressOverlay = null;
+        let shortsBoostActive = false;
+        let tapDebounceTimer = null;
+        let longPressTimer = null;
+        let isLongPressing = false;
+        let boostOverlay = null;
 
         function isOnShorts() {
             return window.location.pathname.includes('/shorts/');
         }
 
-        function getLongPressOverlay() {
-            if (!longPressOverlay) {
-                longPressOverlay = document.createElement('div');
-                longPressOverlay.className = 'yt-speed-longpress';
-                longPressOverlay.textContent = LONG_PRESS_2X + 'x';
-                document.body.appendChild(longPressOverlay);
+        function getBoostOverlay() {
+            if (!boostOverlay) {
+                boostOverlay = document.createElement('div');
+                boostOverlay.className = 'yt-speed-longpress';
+                document.body.appendChild(boostOverlay);
             }
-            return longPressOverlay;
+            return boostOverlay;
         }
 
+        function updateOverlay() {
+            const overlay = getBoostOverlay();
+            if (shortsBoostActive) {
+                overlay.textContent = SHORTS_BOOST_SPEED + 'x';
+                overlay.classList.add('visible', 'yt-speed-boost-active');
+            } else {
+                overlay.textContent = '1x';
+                overlay.classList.remove('yt-speed-boost-active');
+                overlay.classList.add('visible');
+                setTimeout(() => { overlay.classList.remove('visible'); }, 500);
+            }
+        }
+
+        function toggleShortsBoost() {
+            shortsBoostActive = !shortsBoostActive;
+            const video = document.querySelector('video');
+            if (!video) return;
+            isApplyingSpeed = true;
+            if (shortsBoostActive) {
+                preLongPressSpeed = video.playbackRate;
+                video.playbackRate = SHORTS_BOOST_SPEED;
+            } else {
+                video.playbackRate = preLongPressSpeed;
+            }
+            setTimeout(() => { isApplyingSpeed = false; }, 50);
+            updateOverlay();
+            console.log(`[YT-Speed] Shorts boost ${shortsBoostActive ? 'ON' : 'OFF'}`);
+        }
+
+        // Hold mode helpers (fallback)
         function startLongPress() {
             isLongPressing = true;
             const video = document.querySelector('video');
             if (video) {
                 preLongPressSpeed = video.playbackRate;
                 isApplyingSpeed = true;
-                video.playbackRate = LONG_PRESS_2X;
+                video.playbackRate = SHORTS_BOOST_SPEED;
                 setTimeout(() => { isApplyingSpeed = false; }, 50);
             }
-            getLongPressOverlay().classList.add('visible');
+            const overlay = getBoostOverlay();
+            overlay.textContent = SHORTS_BOOST_SPEED + 'x';
+            overlay.classList.add('visible');
         }
 
         function endLongPress() {
@@ -650,7 +696,14 @@
                 video.playbackRate = preLongPressSpeed;
                 setTimeout(() => { isApplyingSpeed = false; }, 50);
             }
-            getLongPressOverlay().classList.remove('visible');
+            getBoostOverlay().classList.remove('visible');
+        }
+
+        function isExcludedTarget(target) {
+            return target.closest(
+                'button, a, input, textarea, [role="button"], ytd-menu-renderer, ' +
+                '.ytd-engagement-panel-section-list-renderer, #comments-button'
+            );
         }
 
         document.addEventListener('touchstart', (e) => {
@@ -659,24 +712,30 @@
 
             const touch = e.touches[0];
             if (touch.clientX >= window.innerWidth / 2) return;
-
-            const target = e.target;
-            if (target.closest('button, a, input, textarea, [role="button"], ytd-menu-renderer')) return;
+            if (isExcludedTarget(e.target)) return;
 
             startX = touch.clientX;
             startY = touch.clientY;
+            touchStartTime = Date.now();
+            swipedAway = false;
 
-            longPressTimer = setTimeout(() => {
-                startLongPress();
-            }, LONG_PRESS_MS);
+            if (SHORTS_SPEED_MODE === 'hold') {
+                longPressTimer = setTimeout(() => { startLongPress(); }, LONG_PRESS_MS);
+            }
         }, { capture: true, passive: true });
 
         document.addEventListener('touchmove', (e) => {
-            if (longPressTimer || isLongPressing) {
-                const touch = e.touches[0];
-                const dx = Math.abs(touch.clientX - startX);
-                const dy = Math.abs(touch.clientY - startY);
-                if (dx > MOVE_THRESHOLD || dy > MOVE_THRESHOLD) {
+            if (!isOnShorts()) return;
+            const touch = e.touches[0];
+            const dx = Math.abs(touch.clientX - startX);
+            const dy = Math.abs(touch.clientY - startY);
+
+            if (SHORTS_SPEED_MODE === 'tap') {
+                if (dx > SHORTS_MOVE_PX || dy > SHORTS_MOVE_PX) {
+                    swipedAway = true;
+                }
+            } else {
+                if ((longPressTimer || isLongPressing) && (dx > MOVE_THRESHOLD || dy > MOVE_THRESHOLD)) {
                     clearTimeout(longPressTimer);
                     longPressTimer = null;
                     endLongPress();
@@ -684,18 +743,57 @@
             }
         }, { capture: true, passive: true });
 
-        document.addEventListener('touchend', () => {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-            endLongPress();
+        document.addEventListener('touchend', (e) => {
+            if (!isOnShorts()) return;
+
+            if (SHORTS_SPEED_MODE === 'tap') {
+                const elapsed = Date.now() - touchStartTime;
+                if (elapsed < SHORTS_TAP_MAX_MS && !swipedAway) {
+                    // Cancel any pending tap (double-tap guard)
+                    if (tapDebounceTimer) {
+                        clearTimeout(tapDebounceTimer);
+                        tapDebounceTimer = null;
+                        // Double-tap detected — let YouTube handle it
+                        return;
+                    }
+                    // Start debounce — commit toggle if no second tap arrives
+                    tapDebounceTimer = setTimeout(() => {
+                        tapDebounceTimer = null;
+                        toggleShortsBoost();
+                    }, DOUBLETAP_GUARD_MS);
+                }
+            } else {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+                endLongPress();
+            }
         }, { capture: true, passive: true });
 
         document.addEventListener('touchcancel', () => {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-            endLongPress();
+            if (SHORTS_SPEED_MODE === 'hold') {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+                endLongPress();
+            }
+            swipedAway = true;
         }, { capture: true, passive: true });
+
+        // Reset boost state on navigation (prevents leaking across Shorts)
+        document.addEventListener('yt-navigate-finish', () => {
+            if (shortsBoostActive) {
+                shortsBoostActive = false;
+                const video = document.querySelector('video');
+                if (video) {
+                    isApplyingSpeed = true;
+                    video.playbackRate = preLongPressSpeed;
+                    setTimeout(() => { isApplyingSpeed = false; }, 50);
+                }
+                getBoostOverlay().classList.remove('visible', 'yt-speed-boost-active');
+            }
+            clearTimeout(tapDebounceTimer);
+            tapDebounceTimer = null;
+        });
     }
 
-    console.log('[YT-Speed] v10 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v11 loaded — stored speed:', getSpeed() + 'x');
 })();
