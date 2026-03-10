@@ -1,5 +1,5 @@
 # context.md
-Last Updated: 2026-03-10 — Shorts tap-to-toggle 2x speed (v11)
+Last Updated: 2026-03-10 — Post-merge cleanup: PRs merged, code quality pass
 
 ## Current State
 - **v11.0** userscript in `script.js`
@@ -26,4 +26,4 @@ Last Updated: 2026-03-10 — Shorts tap-to-toggle 2x speed (v11)
 - Settings cog interception only runs on desktop YouTube (skipped on m.youtube.com)
 
 ## Active Branch
-`agent/shorts-tap-toggle`
+`main` — all PRs merged, cleanup complete

@@ -23,8 +23,13 @@
     const MIN_SPEED = 0.25;
     const MAX_SPEED = 8.0;
     const SPEED_STEP = 0.25;
-    const LONG_PRESS_MS = 400;
-    const MOVE_THRESHOLD = 15;
+    // Timing constants (ms)
+    const APPLY_SPEED_GUARD_MS = 50;     // guard window after programmatic speed change
+    const RATE_CHANGE_DEBOUNCE_MS = 150; // debounce for user-initiated rate changes
+    const SPA_NAV_RESCAN_MS = 300;       // delay before rescanning videos after SPA nav
+    const SPEED_INDICATOR_MS = 700;      // how long the speed indicator stays visible
+    const LONG_PRESS_MS = 400;           // hold duration for Shorts hold-mode
+    const MOVE_THRESHOLD = 15;           // movement threshold for hold-mode cancel
 
     // Shorts tap-to-toggle config
     const SHORTS_SPEED_MODE  = 'tap';    // 'tap' or 'hold'
@@ -32,6 +37,7 @@
     const SHORTS_MOVE_PX     = 10;       // max movement to count as tap
     const SHORTS_BOOST_SPEED = 2.0;      // speed when boost is active
     const DOUBLETAP_GUARD_MS = 250;      // debounce window for double-tap conflict
+    const SHORTS_NAV_RESET_OVERLAY_MS = 500; // overlay fade-out after deactivation
 
     // --- Storage ---
     function getSpeed() {
@@ -51,7 +57,7 @@
         document.querySelectorAll('video').forEach((v) => {
             isApplyingSpeed = true;
             v.playbackRate = speed;
-            setTimeout(() => { isApplyingSpeed = false; }, 50);
+            setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
         });
     }
 
@@ -70,7 +76,7 @@
         if (Math.abs(video.playbackRate - speed) > 0.01) {
             isApplyingSpeed = true;
             video.playbackRate = speed;
-            setTimeout(() => { isApplyingSpeed = false; }, 50);
+            setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
         }
     }
 
@@ -83,7 +89,7 @@
             if (current >= MIN_SPEED && current <= MAX_SPEED) {
                 setSpeed(current);
             }
-        }, 150);
+        }, RATE_CHANGE_DEBOUNCE_MS);
     }
 
     function trackVideo(video) {
@@ -122,7 +128,7 @@
     document.addEventListener('yt-navigate-finish', () => {
         setTimeout(() => {
             document.querySelectorAll('video').forEach(trackVideo);
-        }, 300);
+        }, SPA_NAV_RESCAN_MS);
     });
 
     // --- Desktop keyboard shortcuts ---
@@ -147,6 +153,7 @@
 
     // --- Styles ---
     GM_addStyle(`
+        /* ---- Speed indicator (keyboard shortcut overlay) ---- */
         .yt-speed-indicator {
             position: fixed;
             top: 50%;
@@ -167,6 +174,7 @@
         .yt-speed-indicator.visible {
             opacity: 1;
         }
+        /* ---- Shorts speed boost overlay ---- */
         .yt-speed-longpress {
             position: fixed;
             top: 12px;
@@ -286,7 +294,7 @@
         clearTimeout(indicatorTimeout);
         indicatorTimeout = setTimeout(() => {
             indicatorEl.classList.remove('visible');
-        }, 700);
+        }, SPEED_INDICATOR_MS);
     }
 
     // =========================================================================
@@ -332,6 +340,9 @@
                         return item;
                     }
                 }
+            }
+            if (menuItems.length > 0) {
+                console.warn('[YT-Speed] Settings menu has', menuItems.length, 'items but none matched speed selector — YouTube may have changed their UI');
             }
             return null;
         }
@@ -652,7 +663,7 @@
                 overlay.textContent = '1x';
                 overlay.classList.remove('yt-speed-boost-active');
                 overlay.classList.add('visible');
-                setTimeout(() => { overlay.classList.remove('visible'); }, 500);
+                setTimeout(() => { overlay.classList.remove('visible'); }, SHORTS_NAV_RESET_OVERLAY_MS);
             }
         }
 
@@ -667,7 +678,7 @@
             } else {
                 video.playbackRate = preLongPressSpeed;
             }
-            setTimeout(() => { isApplyingSpeed = false; }, 50);
+            setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
             updateOverlay();
             console.log(`[YT-Speed] Shorts boost ${shortsBoostActive ? 'ON' : 'OFF'}`);
         }
@@ -680,7 +691,7 @@
                 preLongPressSpeed = video.playbackRate;
                 isApplyingSpeed = true;
                 video.playbackRate = SHORTS_BOOST_SPEED;
-                setTimeout(() => { isApplyingSpeed = false; }, 50);
+                setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
             }
             const overlay = getBoostOverlay();
             overlay.textContent = SHORTS_BOOST_SPEED + 'x';
@@ -694,7 +705,7 @@
             if (video) {
                 isApplyingSpeed = true;
                 video.playbackRate = preLongPressSpeed;
-                setTimeout(() => { isApplyingSpeed = false; }, 50);
+                setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
             }
             getBoostOverlay().classList.remove('visible');
         }
@@ -786,7 +797,7 @@
                 if (video) {
                     isApplyingSpeed = true;
                     video.playbackRate = preLongPressSpeed;
-                    setTimeout(() => { isApplyingSpeed = false; }, 50);
+                    setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
                 }
                 getBoostOverlay().classList.remove('visible', 'yt-speed-boost-active');
             }
