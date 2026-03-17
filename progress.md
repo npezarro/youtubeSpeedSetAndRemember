@@ -2,6 +2,7 @@
 
 | Date | Type | Description |
 |------|------|-------------|
+| 2026-03-17 | feat | v13: mobile support — settings cog interceptor now works on m.youtube.com (bottom sheet interception, full-width panel), long-press 2x toggle extended to regular videos (not just Shorts), renamed getActiveShortsVideo→getActiveVideo, added mobile-specific exclusion targets, deactivate restores saved speed on regular videos |
 | 2026-03-13 | feat | v12: fixed Shorts by replacing document.querySelector('video') with getActiveShortsVideo() that targets ytd-reel-video-renderer[is-active], added hybrid tap/long-press deactivation, updated isExcludedTarget for current YouTube DOM, added MutationObserver for swipe navigation detection |
 | 2026-03-10 | refactor | Post-merge cleanup: extracted 7 timing magic numbers into named constants, grouped GM_addStyle by component, added console.warn for selector miss detection |
 | 2026-03-10 | PR #2+#3 | Squash-merged PR #2 (v10 settings cog) and PR #3 (v11 tap-to-toggle) into main after rebasing stacked branches |
