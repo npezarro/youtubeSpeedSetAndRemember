@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      12.0
-// @description  Persists playback speed across sessions. Desktop keyboard shortcuts ([ / ]). Mobile Shorts tap left side to toggle 2x. Settings cog custom speed menu (0.25x–8x).
+// @version      13.0
+// @description  Persists playback speed across sessions. Desktop keyboard shortcuts ([ / ]). Mobile: long-press toggles 2x on any video, tap left side on Shorts. Settings cog custom speed menu (0.25x–8x) on desktop and mobile.
 // @author       npezarro
 // @match        *://www.youtube.com/*
 // @match        *://m.youtube.com/*
@@ -305,8 +305,7 @@
     // =========================================================================
 
     (function initSettingsInterceptor() {
-        // Only on desktop YouTube
-        if (location.hostname === 'm.youtube.com') return;
+        const isMobile = location.hostname === 'm.youtube.com';
 
         let panelEl = null;
         let focusIndex = -1;
@@ -330,6 +329,9 @@
 
         // Find the "Playback speed" menu item in YouTube's settings panel
         function findSpeedMenuItem() {
+            if (isMobile) {
+                return findMobileSpeedMenuItem();
+            }
             const menuItems = document.querySelectorAll('.ytp-settings-menu .ytp-menuitem');
             for (const item of menuItems) {
                 const label = item.querySelector('.ytp-menuitem-label');
@@ -342,6 +344,29 @@
             }
             if (menuItems.length > 0) {
                 console.warn('[YT-Speed] Settings menu has', menuItems.length, 'items but none matched speed selector — YouTube may have changed their UI');
+            }
+            return null;
+        }
+
+        // Mobile: find speed item inside the bottom sheet
+        function findMobileSpeedMenuItem() {
+            const sheet = document.querySelector(
+                'ytm-bottom-sheet-renderer, ' +
+                'ytm-menu-renderer, ' +
+                '.bottom-sheet'
+            );
+            if (!sheet) return null;
+            const items = sheet.querySelectorAll(
+                'ytm-menu-service-item-renderer, ' +
+                'ytm-menu-item, ' +
+                '[class*="menu-item"], ' +
+                'button'
+            );
+            for (const item of items) {
+                const text = item.textContent.trim().toLowerCase();
+                if (text.includes('playback speed') || text.includes('speed') || text.includes('vitesse')) {
+                    return item;
+                }
             }
             return null;
         }
@@ -369,20 +394,30 @@
             applySpeedToAll(newSpeed);
             showSpeedIndicator(newSpeed);
             closePanel();
-            // Also close YouTube's settings popup
-            const settingsBtn = document.querySelector('.ytp-settings-button');
-            if (settingsBtn) settingsBtn.click();
+            if (!isMobile) {
+                // Also close YouTube's settings popup on desktop
+                const settingsBtn = document.querySelector('.ytp-settings-button');
+                if (settingsBtn) settingsBtn.click();
+            }
         }
 
         // Go back to YouTube's top-level settings menu
         function goBack() {
             closePanel();
-            // Reopen YouTube's settings by clicking the cog
-            const settingsBtn = document.querySelector('.ytp-settings-button');
-            if (settingsBtn) {
-                settingsBtn.click();
-                // Need a double-click: one to close, one to reopen
-                setTimeout(() => settingsBtn.click(), 50);
+            if (isMobile) {
+                // On mobile, re-open the player settings via the 3-dot menu
+                const menuBtn = document.querySelector(
+                    'button.player-settings-icon, ' +
+                    'ytm-menu-renderer button, ' +
+                    '.player-controls-top button[aria-label]'
+                );
+                if (menuBtn) setTimeout(() => menuBtn.click(), 50);
+            } else {
+                const settingsBtn = document.querySelector('.ytp-settings-button');
+                if (settingsBtn) {
+                    settingsBtn.click();
+                    setTimeout(() => settingsBtn.click(), 50);
+                }
             }
         }
 
@@ -453,11 +488,24 @@
             panelEl.appendChild(list);
 
             // Position: anchor to settings menu location within the player
-            const player = document.querySelector('#movie_player, .html5-video-player');
-            if (player) {
-                player.appendChild(panelEl);
-            } else {
+            if (isMobile) {
+                // On mobile, position as a full-width bottom sheet
+                panelEl.style.position = 'fixed';
+                panelEl.style.bottom = '0';
+                panelEl.style.left = '0';
+                panelEl.style.right = '0';
+                panelEl.style.borderRadius = '12px 12px 0 0';
+                panelEl.style.minWidth = '100%';
+                panelEl.style.maxHeight = '60vh';
+                panelEl.style.overflowY = 'auto';
                 document.body.appendChild(panelEl);
+            } else {
+                const player = document.querySelector('#movie_player, .html5-video-player');
+                if (player) {
+                    player.appendChild(panelEl);
+                } else {
+                    document.body.appendChild(panelEl);
+                }
             }
 
             // Scroll the active item into view
@@ -524,53 +572,111 @@
 
         // --- Interception logic ---
         // Watch for the settings menu to appear, then intercept the speed item click
+
+        function isSpeedText(text) {
+            const t = text.trim().toLowerCase();
+            return t.includes('playback speed') || t.includes('speed') || t.includes('vitesse');
+        }
+
+        // Desktop interception
         function interceptSpeedClick(e) {
             const menuItem = e.target.closest('.ytp-menuitem');
             if (!menuItem) return;
 
-            // Check if this is the speed menu item
             const label = menuItem.querySelector('.ytp-menuitem-label');
             if (!label) return;
-            const text = label.textContent.trim().toLowerCase();
-            if (!text.includes('playback speed') && !text.includes('speed') && !text.includes('vitesse')) return;
+            if (!isSpeedText(label.textContent)) return;
 
-            // It's the speed item — intercept!
             e.stopPropagation();
             e.preventDefault();
 
-            // Close YouTube's settings popup
             const settingsBtn = document.querySelector('.ytp-settings-button');
             if (settingsBtn) settingsBtn.click();
 
-            // Show our custom panel
             setTimeout(() => showPanel(), 50);
         }
 
-        // Attach the interceptor to the settings menu container
-        // Use MutationObserver to catch when the settings menu appears
-        function attachInterceptor() {
-            const settingsMenu = document.querySelector('.ytp-settings-menu');
-            if (settingsMenu && !settingsMenu._ytsIntercepted) {
-                settingsMenu._ytsIntercepted = true;
-                settingsMenu.addEventListener('click', interceptSpeedClick, { capture: true });
+        // Mobile interception: intercept clicks in the bottom sheet
+        function interceptMobileSpeedClick(e) {
+            // Walk up from clicked element looking for a menu item containing "speed"
+            let el = e.target;
+            for (let i = 0; i < 6 && el; i++) {
+                if (isSpeedText(el.textContent || '')) {
+                    // Make sure this is a menu item, not the whole sheet
+                    const tag = el.tagName?.toLowerCase() || '';
+                    if (tag.includes('renderer') || tag === 'button' || tag === 'div' ||
+                        el.getAttribute('role') === 'option' || el.getAttribute('role') === 'menuitem' ||
+                        el.classList?.contains('menu-item-button')) {
+                        e.stopPropagation();
+                        e.preventDefault();
+
+                        // Close the bottom sheet
+                        const closeBtn = document.querySelector(
+                            'ytm-bottom-sheet-renderer button.close-button, ' +
+                            'ytm-bottom-sheet-renderer [aria-label="Close"], ' +
+                            '.bottom-sheet-header button'
+                        );
+                        if (closeBtn) closeBtn.click();
+                        // Also try clicking outside the sheet to dismiss
+                        const scrim = document.querySelector('.bottom-sheet-scrim, .scrim');
+                        if (scrim) scrim.click();
+
+                        setTimeout(() => showPanel(), 100);
+                        return;
+                    }
+                }
+                el = el.parentElement;
             }
         }
 
-        // Watch for settings menu appearing
+        // Attach interceptors to the appropriate menu container
+        function attachInterceptor() {
+            if (isMobile) {
+                attachMobileInterceptor();
+            } else {
+                const settingsMenu = document.querySelector('.ytp-settings-menu');
+                if (settingsMenu && !settingsMenu._ytsIntercepted) {
+                    settingsMenu._ytsIntercepted = true;
+                    settingsMenu.addEventListener('click', interceptSpeedClick, { capture: true });
+                }
+            }
+        }
+
+        function attachMobileInterceptor() {
+            const sheet = document.querySelector(
+                'ytm-bottom-sheet-renderer, ' +
+                'ytm-menu-renderer, ' +
+                '.bottom-sheet'
+            );
+            if (sheet && !sheet._ytsIntercepted) {
+                sheet._ytsIntercepted = true;
+                sheet.addEventListener('click', interceptMobileSpeedClick, { capture: true });
+                sheet.addEventListener('touchend', interceptMobileSpeedClick, { capture: true });
+            }
+        }
+
+        // Watch for settings menu / bottom sheet appearing
         const settingsObserver = new MutationObserver(() => {
             attachInterceptor();
         });
 
-        // Observe the player or body for settings menu appearance
         function startObserving() {
-            const player = document.querySelector('#movie_player, .html5-video-player');
-            const target = player || document.body;
-            settingsObserver.observe(target, { childList: true, subtree: true });
-            attachInterceptor(); // try immediately too
+            if (isMobile) {
+                // On mobile, observe body for bottom sheet appearance
+                settingsObserver.observe(document.body, { childList: true, subtree: true });
+                attachInterceptor();
+            } else {
+                const player = document.querySelector('#movie_player, .html5-video-player');
+                const target = player || document.body;
+                settingsObserver.observe(target, { childList: true, subtree: true });
+                attachInterceptor();
+            }
         }
 
-        // Wait for the player to exist
-        if (document.querySelector('#movie_player, .html5-video-player')) {
+        // Wait for player or start immediately on mobile
+        if (isMobile) {
+            startObserving();
+        } else if (document.querySelector('#movie_player, .html5-video-player')) {
             startObserving();
         } else {
             const waitForPlayer = new MutationObserver(() => {
@@ -585,12 +691,17 @@
         // Re-attach on SPA navigation
         document.addEventListener('yt-navigate-finish', () => {
             setTimeout(() => {
-                // Reset interception flag on new settings menus
-                const settingsMenu = document.querySelector('.ytp-settings-menu');
-                if (settingsMenu) {
-                    settingsMenu._ytsIntercepted = false;
-                    attachInterceptor();
+                if (isMobile) {
+                    // Reset any existing bottom sheet interception
+                    document.querySelectorAll('ytm-bottom-sheet-renderer, ytm-menu-renderer, .bottom-sheet')
+                        .forEach(el => { el._ytsIntercepted = false; });
+                } else {
+                    const settingsMenu = document.querySelector('.ytp-settings-menu');
+                    if (settingsMenu) {
+                        settingsMenu._ytsIntercepted = false;
+                    }
                 }
+                attachInterceptor();
             }, 500);
         });
 
@@ -627,14 +738,15 @@
         console.log('[YT-Speed] Settings cog interceptor initialized');
     })();
 
-    // --- Shorts speed boost (left side) ---
-    // Behavior: tap left half to activate 2x, tap or long press to deactivate.
+    // --- Mobile speed boost (touch gestures) ---
+    // Shorts: tap left half to activate 2x, tap or long press to deactivate.
+    // Regular videos (mobile): long press to toggle 2x on/off.
     if (navigator.maxTouchPoints > 0) {
         let startX = 0;
         let startY = 0;
         let touchStartTime = 0;
         let swipedAway = false;
-        let shortsState = 'idle'; // 'idle' | 'boosted'
+        let boostState = 'idle'; // 'idle' | 'boosted'
         let tapDebounceTimer = null;
         let longPressTimer = null;
         let gestureConsumed = false;
@@ -645,15 +757,28 @@
             return window.location.pathname.includes('/shorts/');
         }
 
-        // Centralized video targeting: finds the actively playing Shorts video
-        // instead of blindly grabbing the first <video> on the page.
-        function getActiveShortsVideo() {
-            // Desktop: ytd-reel-video-renderer[is-active] wraps the current Short
-            const active = document.querySelector(
-                'ytd-reel-video-renderer[is-active] video, ' +
-                'ytd-shorts video'  // mobile (m.youtube.com)
+        function isOnVideo() {
+            return window.location.pathname.startsWith('/watch') ||
+                   window.location.pathname.includes('/shorts/');
+        }
+
+        // Find the active video element
+        function getActiveVideo() {
+            if (isOnShorts()) {
+                const active = document.querySelector(
+                    'ytd-reel-video-renderer[is-active] video, ' +
+                    'ytd-shorts video'
+                );
+                return active || document.querySelector('video');
+            }
+            // Regular video: find the main player video
+            const playerVideo = document.querySelector(
+                '#movie_player video, ' +
+                '.html5-video-player video, ' +
+                'ytm-player video, ' +
+                '.player-container video'
             );
-            return active || document.querySelector('video');
+            return playerVideo || document.querySelector('video');
         }
 
         function getBoostOverlay() {
@@ -667,7 +792,7 @@
 
         function updateOverlay() {
             const overlay = getBoostOverlay();
-            if (shortsState === 'boosted') {
+            if (boostState === 'boosted') {
                 overlay.textContent = SHORTS_BOOST_SPEED + 'x';
                 overlay.classList.add('visible', 'yt-speed-boost-active');
             } else {
@@ -679,32 +804,33 @@
         }
 
         function activateBoost() {
-            if (shortsState === 'boosted') return;
-            const video = getActiveShortsVideo();
+            if (boostState === 'boosted') return;
+            const video = getActiveVideo();
             if (!video) return;
-            shortsState = 'boosted';
+            boostState = 'boosted';
             isApplyingSpeed = true;
             video.playbackRate = SHORTS_BOOST_SPEED;
             setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
             updateOverlay();
-            console.log('[YT-Speed] Shorts boost ON');
+            console.log('[YT-Speed] Boost ON');
         }
 
         function deactivateBoost() {
-            if (shortsState === 'idle') return;
-            shortsState = 'idle';
-            const video = getActiveShortsVideo();
+            if (boostState === 'idle') return;
+            boostState = 'idle';
+            const video = getActiveVideo();
             if (video) {
+                const restoreSpeed = isOnShorts() ? DEFAULT_SPEED : getSpeed();
                 isApplyingSpeed = true;
-                video.playbackRate = DEFAULT_SPEED;
+                video.playbackRate = restoreSpeed;
                 setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
             }
             updateOverlay();
-            console.log('[YT-Speed] Shorts boost OFF');
+            console.log('[YT-Speed] Boost OFF');
         }
 
         function handleTap() {
-            if (shortsState === 'idle') {
+            if (boostState === 'idle') {
                 activateBoost();
             } else {
                 deactivateBoost();
@@ -722,17 +848,38 @@
                 'ytm-slim-owner-renderer, .slim-owner, ' +
                 '.reel-player-overlay-actions, .overlay-action-bar, ' +
                 'ytd-reel-player-overlay-renderer [id*="action"], ' +
-                '.ytd-reel-multi-format-link-renderer'
+                '.ytd-reel-multi-format-link-renderer, ' +
+                // Mobile-specific exclusions
+                'ytm-bottom-sheet-renderer, .bottom-sheet, ' +
+                '.yts-speed-panel, ' +
+                '.player-controls-top, .player-controls-bottom, ' +
+                'ytm-comment-section-renderer'
             );
         }
 
+        // Check if touch is on/near the video area (for regular videos on mobile)
+        function isTouchOnVideo(touch) {
+            const video = getActiveVideo();
+            if (!video) return false;
+            const rect = video.getBoundingClientRect();
+            return touch.clientY >= rect.top && touch.clientY <= rect.bottom &&
+                   touch.clientX >= rect.left && touch.clientX <= rect.right;
+        }
+
         document.addEventListener('touchstart', (e) => {
-            if (!isOnShorts()) return;
+            if (!isOnVideo()) return;
             if (e.touches.length !== 1) return;
 
             const touch = e.touches[0];
-            if (touch.clientX >= window.innerWidth / 2) return;
             if (isExcludedTarget(e.target)) return;
+
+            const onShorts = isOnShorts();
+
+            // Shorts: only left half
+            if (onShorts && touch.clientX >= window.innerWidth / 2) return;
+
+            // Regular videos: touch must be on the video area
+            if (!onShorts && !isTouchOnVideo(touch)) return;
 
             startX = touch.clientX;
             startY = touch.clientY;
@@ -740,25 +887,33 @@
             swipedAway = false;
             gestureConsumed = false;
 
-            // If boost is active, start a long-press timer to deactivate
-            if (shortsState === 'boosted') {
+            if (onShorts) {
+                // Shorts: long-press to deactivate when boosted
+                if (boostState === 'boosted') {
+                    longPressTimer = setTimeout(() => {
+                        longPressTimer = null;
+                        gestureConsumed = true;
+                        deactivateBoost();
+                    }, LONG_PRESS_MS);
+                }
+            } else {
+                // Regular videos: long-press toggles 2x on/off
                 longPressTimer = setTimeout(() => {
                     longPressTimer = null;
                     gestureConsumed = true;
-                    deactivateBoost();
+                    handleTap();
                 }, LONG_PRESS_MS);
             }
         }, { capture: true, passive: true });
 
         document.addEventListener('touchmove', (e) => {
-            if (!isOnShorts()) return;
+            if (!isOnVideo()) return;
             const touch = e.touches[0];
             const dx = Math.abs(touch.clientX - startX);
             const dy = Math.abs(touch.clientY - startY);
 
             if (dx > SHORTS_MOVE_PX || dy > SHORTS_MOVE_PX) {
                 swipedAway = true;
-                // Cancel long-press timer on movement
                 if (longPressTimer) {
                     clearTimeout(longPressTimer);
                     longPressTimer = null;
@@ -767,34 +922,34 @@
         }, { capture: true, passive: true });
 
         document.addEventListener('touchend', (e) => {
-            if (!isOnShorts()) return;
+            if (!isOnVideo()) return;
 
-            // Clean up long-press timer
             if (longPressTimer) {
                 clearTimeout(longPressTimer);
                 longPressTimer = null;
             }
 
-            // If long press already handled the gesture, skip the tap
             if (gestureConsumed) {
                 gestureConsumed = false;
                 return;
             }
 
-            const elapsed = Date.now() - touchStartTime;
-            if (elapsed < SHORTS_TAP_MAX_MS && !swipedAway) {
-                // Double-tap guard: if a second tap arrives within the window,
-                // cancel the pending toggle and let YouTube handle it
-                if (tapDebounceTimer) {
-                    clearTimeout(tapDebounceTimer);
-                    tapDebounceTimer = null;
-                    return;
+            // Shorts: tap on left half toggles boost
+            if (isOnShorts()) {
+                const elapsed = Date.now() - touchStartTime;
+                if (elapsed < SHORTS_TAP_MAX_MS && !swipedAway) {
+                    if (tapDebounceTimer) {
+                        clearTimeout(tapDebounceTimer);
+                        tapDebounceTimer = null;
+                        return;
+                    }
+                    tapDebounceTimer = setTimeout(() => {
+                        tapDebounceTimer = null;
+                        handleTap();
+                    }, DOUBLETAP_GUARD_MS);
                 }
-                tapDebounceTimer = setTimeout(() => {
-                    tapDebounceTimer = null;
-                    handleTap();
-                }, DOUBLETAP_GUARD_MS);
             }
+            // Regular videos: only long-press triggers boost (handled in touchstart timer)
         }, { capture: true, passive: true });
 
         document.addEventListener('touchcancel', () => {
@@ -808,7 +963,7 @@
 
         // Reset boost on SPA navigation
         function resetBoostState() {
-            if (shortsState === 'boosted') {
+            if (boostState === 'boosted') {
                 deactivateBoost();
             }
             clearTimeout(tapDebounceTimer);
@@ -817,20 +972,18 @@
 
         document.addEventListener('yt-navigate-finish', resetBoostState);
 
-        // MutationObserver for Shorts swipe navigation: yt-navigate-finish
-        // doesn't always fire when swiping between Shorts. Watch for the
-        // active video element changing and reset boost state accordingly.
+        // MutationObserver for Shorts swipe navigation
         let shortsNavDebounce = null;
         const shortsContainer = () =>
             document.querySelector('ytd-shorts, ytd-reel-video-renderer')?.parentElement;
 
         function checkActiveVideoChanged() {
-            const currentVideo = getActiveShortsVideo();
+            const currentVideo = getActiveVideo();
             if (currentVideo && currentVideo !== lastActiveVideo) {
                 lastActiveVideo = currentVideo;
-                if (shortsState === 'boosted') {
+                if (boostState === 'boosted') {
                     resetBoostState();
-                    console.log('[YT-Speed] Shorts swipe detected, reset boost');
+                    console.log('[YT-Speed] Video changed, reset boost');
                 }
             }
         }
@@ -841,7 +994,6 @@
             shortsNavDebounce = setTimeout(checkActiveVideoChanged, 200);
         });
 
-        // Start observing when we enter Shorts, stop when we leave
         let observingShorts = false;
         function updateShortsObserver() {
             if (isOnShorts() && !observingShorts) {
@@ -849,7 +1001,7 @@
                 if (container) {
                     shortsNavObserver.observe(container, { childList: true });
                     observingShorts = true;
-                    lastActiveVideo = getActiveShortsVideo();
+                    lastActiveVideo = getActiveVideo();
                 }
             } else if (!isOnShorts() && observingShorts) {
                 shortsNavObserver.disconnect();
@@ -863,5 +1015,5 @@
         setTimeout(updateShortsObserver, 1000);
     }
 
-    console.log('[YT-Speed] v12 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v13 loaded — stored speed:', getSpeed() + 'x');
 })();
