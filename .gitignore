@@ -4,26 +4,20 @@ node_modules/
 # Build output
 dist/
 build/
-web-ext-artifacts/
 
-# Packaged extensions
+# Extension packaging
 *.zip
 *.crx
-*.xpi
+web-ext-artifacts/
 
 # Environment
 .env
 .env.*
 
-# Logs
-*.log
-npm-debug.log*
-
 # OS files
 .DS_Store
 Thumbs.db
 
-# Editor
-*.swp
-*.swo
-*~
+# Logs
+*.log
+npm-debug.log*
