@@ -1,5 +1,5 @@
 # context.md
-Last Updated: 2026-03-17 — extracted all YouTube DOM selectors into centralized SELECTORS config object
+Last Updated: 2026-03-17 — added TEST_MATRIX.md for mobile fix verification (PRs #9-11)
 
 ## Current State
 - **v13.0** userscript in `script.js`
@@ -26,6 +26,7 @@ Last Updated: 2026-03-17 — extracted all YouTube DOM selectors into centralize
 - Manual testing on mobile Chrome (m.youtube.com) for settings cog bottom sheet interception — YouTube's mobile DOM changes frequently
 - Mobile bottom sheet selectors (`ytm-bottom-sheet-renderer`, `ytm-menu-service-item-renderer`) should be verified against live site
 - Regular video long-press: verify it doesn't conflict with YouTube's native long-press (preview/scrub)
+- TEST_MATRIX.md documents all verification scenarios for the v13 mobile fixes (35 test cases across 5 categories)
 
 ## Environment Notes
 - Tampermonkey userscript, no server, no build, no deploy
@@ -33,4 +34,4 @@ Last Updated: 2026-03-17 — extracted all YouTube DOM selectors into centralize
 - Auto-updates via `@updateURL` / `@downloadURL` in metadata block
 
 ## Active Branch
-`claude/extract-selectors`
+`claude/test-matrix`
