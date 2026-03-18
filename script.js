@@ -23,6 +23,100 @@
     const MIN_SPEED = 0.25;
     const MAX_SPEED = 8.0;
     const SPEED_STEP = 0.25;
+
+    // --- DOM Selectors ---
+    // Centralized YouTube DOM selectors. YouTube changes these periodically;
+    // update here when they break. Last verified: 2026-03-17.
+    const SELECTORS = {
+        // Player container elements
+        player: {
+            // Main desktop player wrapper (has classList, theme info, etc.)
+            container: '#movie_player, .html5-video-player',
+            // All video elements on page
+            video: 'video',
+            // Light theme class on the player element (checked via classList.contains)
+            lightThemeClass: 'ytp-light',
+        },
+
+        // Ad detection overlays applied to the player
+        ads: {
+            // Class added when a video ad is playing
+            showing: '.ad-showing',
+            // Class added when an ad interrupts playback
+            interrupting: '.ad-interrupting',
+        },
+
+        // Desktop settings cog menu
+        settingsMenu: {
+            // The popup container for the settings gear menu
+            menu: '.ytp-settings-menu',
+            // Individual menu rows inside the settings popup
+            menuItem: '.ytp-menuitem',
+            // All menu items scoped under the settings menu
+            menuItems: '.ytp-settings-menu .ytp-menuitem',
+            // Label text element within each menu row
+            menuItemLabel: '.ytp-menuitem-label',
+            // The gear/cog button that opens the settings popup
+            button: '.ytp-settings-button',
+        },
+
+        // Mobile bottom sheet and menu elements (m.youtube.com)
+        mobile: {
+            // Bottom sheet container variants (YouTube changes these across updates)
+            bottomSheet: 'ytm-bottom-sheet-renderer, ytm-menu-renderer, .bottom-sheet',
+            // Clickable menu items inside the bottom sheet
+            bottomSheetItems: 'ytm-menu-service-item-renderer, ytm-menu-item, [class*="menu-item"], button',
+            // Close/dismiss buttons within the bottom sheet
+            bottomSheetClose: 'ytm-bottom-sheet-renderer button.close-button, ytm-bottom-sheet-renderer [aria-label="Close"], .bottom-sheet-header button',
+            // Scrim overlay behind the bottom sheet (click to dismiss)
+            bottomSheetScrim: '.bottom-sheet-scrim, .scrim',
+            // Buttons that open the player settings on mobile
+            settingsButton: 'button.player-settings-icon, ytm-menu-renderer button, .player-controls-top button[aria-label]',
+        },
+
+        // Shorts-specific selectors
+        shorts: {
+            // The currently visible Shorts video element
+            activeVideo: 'ytd-reel-video-renderer[is-active] video, ytd-shorts video',
+            // Shorts container parent (used for MutationObserver on swipe nav)
+            container: 'ytd-shorts, ytd-reel-video-renderer',
+        },
+
+        // Regular video player selectors (desktop and mobile)
+        videoPlayer: {
+            // Video element inside the main player area (tried in priority order)
+            video: '#movie_player video, .html5-video-player video, ytm-player video, .player-container video',
+        },
+
+        // Elements excluded from touch gesture handling (compound selector)
+        touchExcluded: [
+            // Standard interactive elements
+            'button', 'a', 'input', 'textarea', 'select',
+            // ARIA role interactive elements
+            '[role="button"]', '[role="slider"]', '[role="menu"]', '[role="menuitem"]',
+            // YouTube desktop action renderers
+            'ytd-menu-renderer', 'ytd-toggle-button-renderer',
+            'ytd-like-button-renderer', 'ytd-button-renderer',
+            // Engagement panel (comments, description, etc.)
+            '.ytd-engagement-panel-section-list-renderer',
+            // Desktop action bar buttons
+            '#comments-button', '#menu', '#actions',
+            // Mobile owner/channel info bar
+            'ytm-slim-owner-renderer', '.slim-owner',
+            // Shorts overlay action buttons (like, comment, share column)
+            '.reel-player-overlay-actions', '.overlay-action-bar',
+            'ytd-reel-player-overlay-renderer [id*="action"]',
+            '.ytd-reel-multi-format-link-renderer',
+            // Mobile-specific exclusions
+            'ytm-bottom-sheet-renderer', '.bottom-sheet',
+            // Our own speed panel
+            '.yts-speed-panel',
+            // Mobile player control bars
+            '.player-controls-top', '.player-controls-bottom',
+            // Mobile comment section
+            'ytm-comment-section-renderer',
+        ].join(', '),
+    };
     // Timing constants (ms)
     const APPLY_SPEED_GUARD_MS = 50;     // guard window after programmatic speed change
     const RATE_CHANGE_DEBOUNCE_MS = 150; // debounce for user-initiated rate changes
@@ -53,7 +147,7 @@
 
     // --- Apply speed to all videos ---
     function applySpeedToAll(speed) {
-        document.querySelectorAll('video').forEach((v) => {
+        document.querySelectorAll(SELECTORS.player.video).forEach((v) => {
             isApplyingSpeed = true;
             v.playbackRate = speed;
             setTimeout(() => { isApplyingSpeed = false; }, APPLY_SPEED_GUARD_MS);
@@ -62,7 +156,7 @@
 
     // --- Ad detection ---
     function isAdPlaying() {
-        return !!(document.querySelector('.ad-showing') || document.querySelector('.ad-interrupting'));
+        return !!(document.querySelector(SELECTORS.ads.showing) || document.querySelector(SELECTORS.ads.interrupting));
     }
 
     // --- Video lifecycle ---
@@ -106,7 +200,7 @@
             trackVideo(root);
         }
         if (root.querySelectorAll) {
-            root.querySelectorAll('video').forEach(trackVideo);
+            root.querySelectorAll(SELECTORS.player.video).forEach(trackVideo);
         }
     }
 
@@ -121,12 +215,12 @@
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
-    document.querySelectorAll('video').forEach(trackVideo);
+    document.querySelectorAll(SELECTORS.player.video).forEach(trackVideo);
 
     // --- SPA navigation ---
     document.addEventListener('yt-navigate-finish', () => {
         setTimeout(() => {
-            document.querySelectorAll('video').forEach(trackVideo);
+            document.querySelectorAll(SELECTORS.player.video).forEach(trackVideo);
         }, SPA_NAV_RESCAN_MS);
     });
 
@@ -322,9 +416,9 @@
 
         // Detect dark/light theme from the player
         function isDarkTheme() {
-            const player = document.querySelector('#movie_player, .html5-video-player');
+            const player = document.querySelector(SELECTORS.player.container);
             if (!player) return true; // default dark
-            return !player.classList.contains('ytp-light');
+            return !player.classList.contains(SELECTORS.player.lightThemeClass);
         }
 
         // Find the "Playback speed" menu item in YouTube's settings panel
@@ -332,9 +426,9 @@
             if (isMobile) {
                 return findMobileSpeedMenuItem();
             }
-            const menuItems = document.querySelectorAll('.ytp-settings-menu .ytp-menuitem');
+            const menuItems = document.querySelectorAll(SELECTORS.settingsMenu.menuItems);
             for (const item of menuItems) {
-                const label = item.querySelector('.ytp-menuitem-label');
+                const label = item.querySelector(SELECTORS.settingsMenu.menuItemLabel);
                 if (label) {
                     const text = label.textContent.trim().toLowerCase();
                     if (text.includes('playback speed') || text.includes('speed') || text.includes('vitesse')) {
@@ -350,18 +444,9 @@
 
         // Mobile: find speed item inside the bottom sheet
         function findMobileSpeedMenuItem() {
-            const sheet = document.querySelector(
-                'ytm-bottom-sheet-renderer, ' +
-                'ytm-menu-renderer, ' +
-                '.bottom-sheet'
-            );
+            const sheet = document.querySelector(SELECTORS.mobile.bottomSheet);
             if (!sheet) return null;
-            const items = sheet.querySelectorAll(
-                'ytm-menu-service-item-renderer, ' +
-                'ytm-menu-item, ' +
-                '[class*="menu-item"], ' +
-                'button'
-            );
+            const items = sheet.querySelectorAll(SELECTORS.mobile.bottomSheetItems);
             for (const item of items) {
                 const text = item.textContent.trim().toLowerCase();
                 if (text.includes('playback speed') || text.includes('speed') || text.includes('vitesse')) {
@@ -396,7 +481,7 @@
             closePanel();
             if (!isMobile) {
                 // Also close YouTube's settings popup on desktop
-                const settingsBtn = document.querySelector('.ytp-settings-button');
+                const settingsBtn = document.querySelector(SELECTORS.settingsMenu.button);
                 if (settingsBtn) settingsBtn.click();
             }
         }
@@ -406,14 +491,10 @@
             closePanel();
             if (isMobile) {
                 // On mobile, re-open the player settings via the 3-dot menu
-                const menuBtn = document.querySelector(
-                    'button.player-settings-icon, ' +
-                    'ytm-menu-renderer button, ' +
-                    '.player-controls-top button[aria-label]'
-                );
+                const menuBtn = document.querySelector(SELECTORS.mobile.settingsButton);
                 if (menuBtn) setTimeout(() => menuBtn.click(), 50);
             } else {
-                const settingsBtn = document.querySelector('.ytp-settings-button');
+                const settingsBtn = document.querySelector(SELECTORS.settingsMenu.button);
                 if (settingsBtn) {
                     settingsBtn.click();
                     setTimeout(() => settingsBtn.click(), 50);
@@ -500,7 +581,7 @@
                 panelEl.style.overflowY = 'auto';
                 document.body.appendChild(panelEl);
             } else {
-                const player = document.querySelector('#movie_player, .html5-video-player');
+                const player = document.querySelector(SELECTORS.player.container);
                 if (player) {
                     player.appendChild(panelEl);
                 } else {
@@ -580,17 +661,17 @@
 
         // Desktop interception
         function interceptSpeedClick(e) {
-            const menuItem = e.target.closest('.ytp-menuitem');
+            const menuItem = e.target.closest(SELECTORS.settingsMenu.menuItem);
             if (!menuItem) return;
 
-            const label = menuItem.querySelector('.ytp-menuitem-label');
+            const label = menuItem.querySelector(SELECTORS.settingsMenu.menuItemLabel);
             if (!label) return;
             if (!isSpeedText(label.textContent)) return;
 
             e.stopPropagation();
             e.preventDefault();
 
-            const settingsBtn = document.querySelector('.ytp-settings-button');
+            const settingsBtn = document.querySelector(SELECTORS.settingsMenu.button);
             if (settingsBtn) settingsBtn.click();
 
             setTimeout(() => showPanel(), 50);
@@ -611,14 +692,10 @@
                         e.preventDefault();
 
                         // Close the bottom sheet
-                        const closeBtn = document.querySelector(
-                            'ytm-bottom-sheet-renderer button.close-button, ' +
-                            'ytm-bottom-sheet-renderer [aria-label="Close"], ' +
-                            '.bottom-sheet-header button'
-                        );
+                        const closeBtn = document.querySelector(SELECTORS.mobile.bottomSheetClose);
                         if (closeBtn) closeBtn.click();
                         // Also try clicking outside the sheet to dismiss
-                        const scrim = document.querySelector('.bottom-sheet-scrim, .scrim');
+                        const scrim = document.querySelector(SELECTORS.mobile.bottomSheetScrim);
                         if (scrim) scrim.click();
 
                         setTimeout(() => showPanel(), 100);
@@ -634,7 +711,7 @@
             if (isMobile) {
                 attachMobileInterceptor();
             } else {
-                const settingsMenu = document.querySelector('.ytp-settings-menu');
+                const settingsMenu = document.querySelector(SELECTORS.settingsMenu.menu);
                 if (settingsMenu && !settingsMenu._ytsIntercepted) {
                     settingsMenu._ytsIntercepted = true;
                     settingsMenu.addEventListener('click', interceptSpeedClick, { capture: true });
@@ -643,11 +720,7 @@
         }
 
         function attachMobileInterceptor() {
-            const sheet = document.querySelector(
-                'ytm-bottom-sheet-renderer, ' +
-                'ytm-menu-renderer, ' +
-                '.bottom-sheet'
-            );
+            const sheet = document.querySelector(SELECTORS.mobile.bottomSheet);
             if (sheet && !sheet._ytsIntercepted) {
                 sheet._ytsIntercepted = true;
                 sheet.addEventListener('click', interceptMobileSpeedClick, { capture: true });
@@ -666,7 +739,7 @@
                 settingsObserver.observe(document.body, { childList: true, subtree: true });
                 attachInterceptor();
             } else {
-                const player = document.querySelector('#movie_player, .html5-video-player');
+                const player = document.querySelector(SELECTORS.player.container);
                 const target = player || document.body;
                 settingsObserver.observe(target, { childList: true, subtree: true });
                 attachInterceptor();
@@ -676,11 +749,11 @@
         // Wait for player or start immediately on mobile
         if (isMobile) {
             startObserving();
-        } else if (document.querySelector('#movie_player, .html5-video-player')) {
+        } else if (document.querySelector(SELECTORS.player.container)) {
             startObserving();
         } else {
             const waitForPlayer = new MutationObserver(() => {
-                if (document.querySelector('#movie_player, .html5-video-player')) {
+                if (document.querySelector(SELECTORS.player.container)) {
                     waitForPlayer.disconnect();
                     startObserving();
                 }
@@ -693,10 +766,10 @@
             setTimeout(() => {
                 if (isMobile) {
                     // Reset any existing bottom sheet interception
-                    document.querySelectorAll('ytm-bottom-sheet-renderer, ytm-menu-renderer, .bottom-sheet')
+                    document.querySelectorAll(SELECTORS.mobile.bottomSheet)
                         .forEach(el => { el._ytsIntercepted = false; });
                 } else {
-                    const settingsMenu = document.querySelector('.ytp-settings-menu');
+                    const settingsMenu = document.querySelector(SELECTORS.settingsMenu.menu);
                     if (settingsMenu) {
                         settingsMenu._ytsIntercepted = false;
                     }
@@ -708,7 +781,7 @@
         // Also close our panel when YouTube's settings popup closes
         const popupObserver = new MutationObserver(() => {
             if (!panelEl) return;
-            const settingsMenu = document.querySelector('.ytp-settings-menu');
+            const settingsMenu = document.querySelector(SELECTORS.settingsMenu.menu);
             if (settingsMenu) {
                 const isVisible = settingsMenu.style.display !== 'none' &&
                     settingsMenu.offsetParent !== null;
@@ -719,7 +792,7 @@
 
         // Observe settings button for aria-expanded changes
         const checkSettingsBtn = () => {
-            const btn = document.querySelector('.ytp-settings-button');
+            const btn = document.querySelector(SELECTORS.settingsMenu.button);
             if (btn && !btn._ytsObserved) {
                 btn._ytsObserved = true;
                 const attrObserver = new MutationObserver(() => {
@@ -765,20 +838,12 @@
         // Find the active video element
         function getActiveVideo() {
             if (isOnShorts()) {
-                const active = document.querySelector(
-                    'ytd-reel-video-renderer[is-active] video, ' +
-                    'ytd-shorts video'
-                );
-                return active || document.querySelector('video');
+                const active = document.querySelector(SELECTORS.shorts.activeVideo);
+                return active || document.querySelector(SELECTORS.player.video);
             }
             // Regular video: find the main player video
-            const playerVideo = document.querySelector(
-                '#movie_player video, ' +
-                '.html5-video-player video, ' +
-                'ytm-player video, ' +
-                '.player-container video'
-            );
-            return playerVideo || document.querySelector('video');
+            const playerVideo = document.querySelector(SELECTORS.videoPlayer.video);
+            return playerVideo || document.querySelector(SELECTORS.player.video);
         }
 
         function getBoostOverlay() {
@@ -838,23 +903,7 @@
         }
 
         function isExcludedTarget(target) {
-            return target.closest(
-                'button, a, input, textarea, select, ' +
-                '[role="button"], [role="slider"], [role="menu"], [role="menuitem"], ' +
-                'ytd-menu-renderer, ytd-toggle-button-renderer, ' +
-                'ytd-like-button-renderer, ytd-button-renderer, ' +
-                '.ytd-engagement-panel-section-list-renderer, ' +
-                '#comments-button, #menu, #actions, ' +
-                'ytm-slim-owner-renderer, .slim-owner, ' +
-                '.reel-player-overlay-actions, .overlay-action-bar, ' +
-                'ytd-reel-player-overlay-renderer [id*="action"], ' +
-                '.ytd-reel-multi-format-link-renderer, ' +
-                // Mobile-specific exclusions
-                'ytm-bottom-sheet-renderer, .bottom-sheet, ' +
-                '.yts-speed-panel, ' +
-                '.player-controls-top, .player-controls-bottom, ' +
-                'ytm-comment-section-renderer'
-            );
+            return target.closest(SELECTORS.touchExcluded);
         }
 
         // Check if touch is on/near the video area (for regular videos on mobile)
@@ -975,7 +1024,7 @@
         // MutationObserver for Shorts swipe navigation
         let shortsNavDebounce = null;
         const shortsContainer = () =>
-            document.querySelector('ytd-shorts, ytd-reel-video-renderer')?.parentElement;
+            document.querySelector(SELECTORS.shorts.container)?.parentElement;
 
         function checkActiveVideoChanged() {
             const currentVideo = getActiveVideo();
