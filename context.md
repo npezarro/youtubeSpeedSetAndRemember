@@ -1,5 +1,5 @@
 # context.md
-Last Updated: 2026-03-17 — v13: mobile support for settings cog and long-press 2x toggle
+Last Updated: 2026-03-17 — extracted all YouTube DOM selectors into centralized SELECTORS config object
 
 ## Current State
 - **v13.0** userscript in `script.js`
@@ -19,7 +19,8 @@ Last Updated: 2026-03-17 — v13: mobile support for settings cog and long-press
 - Speed persistence via GM_getValue/GM_setValue
 - Uses MutationObserver for video detection and settings menu interception
 - Ad-aware, SPA-aware
-- ~960 lines, no dependencies, no build step
+- All YouTube DOM selectors centralized in `SELECTORS` config object at top of file, grouped by: player, ads, settingsMenu, mobile, shorts, videoPlayer, touchExcluded
+- ~1020 lines, no dependencies, no build step
 
 ## Open Work
 - Manual testing on mobile Chrome (m.youtube.com) for settings cog bottom sheet interception — YouTube's mobile DOM changes frequently
@@ -32,4 +33,4 @@ Last Updated: 2026-03-17 — v13: mobile support for settings cog and long-press
 - Auto-updates via `@updateURL` / `@downloadURL` in metadata block
 
 ## Active Branch
-`claude/mobile-fix`
+`claude/extract-selectors`
