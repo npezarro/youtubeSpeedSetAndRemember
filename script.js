@@ -778,36 +778,6 @@
             }, 500);
         });
 
-        // Also close our panel when YouTube's settings popup closes
-        const popupObserver = new MutationObserver(() => {
-            if (!panelEl) return;
-            const settingsMenu = document.querySelector(SELECTORS.settingsMenu.menu);
-            if (settingsMenu) {
-                const isVisible = settingsMenu.style.display !== 'none' &&
-                    settingsMenu.offsetParent !== null;
-                // If YouTube's settings menu is gone but our panel is up, leave it —
-                // we closed the YT menu intentionally. Only close if user dismissed elsewhere.
-            }
-        });
-
-        // Observe settings button for aria-expanded changes
-        const checkSettingsBtn = () => {
-            const btn = document.querySelector(SELECTORS.settingsMenu.button);
-            if (btn && !btn._ytsObserved) {
-                btn._ytsObserved = true;
-                const attrObserver = new MutationObserver(() => {
-                    // If settings button is no longer "active" and our panel exists,
-                    // it may mean user clicked away
-                    if (panelEl && btn.getAttribute('aria-expanded') === 'false') {
-                        // Don't close here — we handle it via outside-click
-                    }
-                });
-                attrObserver.observe(btn, { attributes: true, attributeFilter: ['aria-expanded'] });
-            }
-        };
-        setTimeout(checkSettingsBtn, 1000);
-        document.addEventListener('yt-navigate-finish', () => setTimeout(checkSettingsBtn, 1000));
-
         console.log('[YT-Speed] Settings cog interceptor initialized');
     })();
 
