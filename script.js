@@ -1,11 +1,10 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      14.0
+// @version      15.0
 // @description  Floating speed toggle for Shorts (2x) and regular videos. Desktop keyboard shortcuts ([ / ]). Persists speed across sessions.
 // @author       npezarro
-// @match        *://www.youtube.com/*
-// @match        *://m.youtube.com/*
+// @match        https://www.youtube.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_addStyle
@@ -41,13 +40,14 @@
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
-    let isApplyingSpeed = false;
+    // Counter instead of boolean — handles concurrent video elements safely
+    let applyingSpeedCount = 0;
 
     function applyToAll(speed) {
         document.querySelectorAll('video').forEach(v => {
-            isApplyingSpeed = true;
+            applyingSpeedCount++;
             v.playbackRate = speed;
-            setTimeout(() => { isApplyingSpeed = false; }, 50);
+            setTimeout(() => { applyingSpeedCount--; }, 50);
         });
     }
 
@@ -75,7 +75,7 @@
         if (tracked.has(video)) return;
         tracked.add(video);
         video.addEventListener('ratechange', () => {
-            if (isApplyingSpeed || isAdPlaying()) return;
+            if (applyingSpeedCount > 0 || isAdPlaying()) return;
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 const r = video.playbackRate;
@@ -83,9 +83,9 @@
             }, 150);
         });
         if (!isAdPlaying() && !isOnShorts()) {
-            isApplyingSpeed = true;
+            applyingSpeedCount++;
             video.playbackRate = getSpeed();
-            setTimeout(() => { isApplyingSpeed = false; }, 50);
+            setTimeout(() => { applyingSpeedCount--; }, 50);
         }
     }
 
@@ -93,10 +93,32 @@
         document.querySelectorAll('video').forEach(trackVideo);
     }
 
-    const observer = new MutationObserver(() => scanVideos());
+    const observer = new MutationObserver(() => {
+        scanVideos();
+        // Re-injection guard: if toggle was removed from DOM, re-attach it
+        if (toggleEl && !toggleEl.parentElement) {
+            injectToggle();
+        }
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     scanVideos();
     document.addEventListener('yt-navigate-finish', () => setTimeout(scanVideos, 300));
+
+    // ── Health check — detect toggle visibility failures ─────────────
+    let healthFailCount = 0;
+    document.addEventListener('yt-navigate-finish', () => {
+        if (!isOnShorts() && !isOnWatch()) return;
+        setTimeout(() => {
+            if (toggleEl && toggleEl.offsetHeight === 0) {
+                healthFailCount++;
+                if (healthFailCount >= 3) {
+                    console.warn('[YT-Speed] Toggle has zero height after 3 navigations — YouTube DOM may have changed');
+                }
+            } else {
+                healthFailCount = 0;
+            }
+        }, 1000);
+    });
 
     // ── Desktop keyboard shortcuts ──────────────────────────────────
     document.addEventListener('keydown', e => {
@@ -134,7 +156,11 @@
 
     // ── Floating toggle button ──────────────────────────────────────
     let toggleEl = null;
-    let shortsBoostActive = false;
+
+    function isShortsBoostActive() {
+        const video = document.querySelector('video');
+        return video && Math.abs(video.playbackRate - SHORTS_BOOST) < 0.05;
+    }
 
     function createToggle() {
         if (toggleEl) return toggleEl;
@@ -145,26 +171,47 @@
             e.preventDefault();
             onToggleTap();
         });
-        // Prevent YouTube from intercepting touches on our button
         toggleEl.addEventListener('touchend', e => {
             e.stopPropagation();
             e.preventDefault();
             onToggleTap();
         });
         toggleEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-        document.body.appendChild(toggleEl);
         return toggleEl;
+    }
+
+    // Inject toggle into the appropriate container instead of document.body
+    function injectToggle() {
+        if (!toggleEl) return;
+        if (isOnShorts()) {
+            // Shorts: inject into the reel container, left side to avoid action buttons
+            const reelContainer = document.querySelector('ytd-reel-video-renderer');
+            if (reelContainer) {
+                reelContainer.style.position = reelContainer.style.position || 'relative';
+                reelContainer.appendChild(toggleEl);
+                return;
+            }
+        } else {
+            // Watch pages: inject inside #movie_player
+            const player = document.querySelector('#movie_player');
+            if (player) {
+                player.appendChild(toggleEl);
+                return;
+            }
+        }
+        // Fallback to body if containers aren't found yet
+        document.body.appendChild(toggleEl);
     }
 
     function onToggleTap() {
         if (isOnShorts()) {
-            // Shorts: simple 1x/2x toggle
-            shortsBoostActive = !shortsBoostActive;
-            const speed = shortsBoostActive ? SHORTS_BOOST : DEFAULT_SPEED;
+            const boosted = isShortsBoostActive();
+            const speed = boosted ? DEFAULT_SPEED : SHORTS_BOOST;
             applyToAll(speed);
             updateToggle();
+            // Visual feedback on speed change
+            showIndicator(speed);
         } else {
-            // Regular video: cycle through CYCLE_SPEEDS
             const current = getSpeed();
             let nextIdx = 0;
             for (let i = 0; i < CYCLE_SPEEDS.length; i++) {
@@ -182,9 +229,10 @@
     function updateToggle() {
         if (!toggleEl) return;
         if (isOnShorts()) {
-            const speed = shortsBoostActive ? SHORTS_BOOST : DEFAULT_SPEED;
+            const boosted = isShortsBoostActive();
+            const speed = boosted ? SHORTS_BOOST : DEFAULT_SPEED;
             toggleEl.textContent = formatSpeed(speed);
-            toggleEl.classList.toggle('active', shortsBoostActive);
+            toggleEl.classList.toggle('active', boosted);
         } else {
             toggleEl.textContent = formatSpeed(getSpeed());
             toggleEl.classList.toggle('active', getSpeed() > 1.05);
@@ -195,14 +243,13 @@
         const el = createToggle();
         el.classList.add('visible');
         if (isOnShorts()) {
-            // Top right for Shorts
             el.classList.add('shorts');
             el.classList.remove('video');
         } else {
-            // Below the video controls area for regular videos
             el.classList.remove('shorts');
             el.classList.add('video');
         }
+        injectToggle();
         updateToggle();
     }
 
@@ -215,10 +262,6 @@
     // ── Page state management ───────────────────────────────────────
     function onNavigate() {
         if (isOnShorts() || isOnWatch()) {
-            // Reset Shorts boost on navigation
-            if (isOnShorts() && shortsBoostActive) {
-                shortsBoostActive = false;
-            }
             setTimeout(showToggle, 500);
         } else {
             hideToggle();
@@ -226,15 +269,16 @@
     }
 
     document.addEventListener('yt-navigate-finish', onNavigate);
-    // Also handle Shorts swipe (video change within Shorts)
+
+    // Handle Shorts swipe (video change within Shorts)
     const shortsObserver = new MutationObserver(() => {
         if (!isOnShorts()) return;
-        // Reset boost when swiping to new Short
-        if (shortsBoostActive) {
-            shortsBoostActive = false;
+        // Reset speed on swipe — derive from actual playback rate
+        const video = document.querySelector('video');
+        if (video && Math.abs(video.playbackRate - SHORTS_BOOST) < 0.05) {
             applyToAll(DEFAULT_SPEED);
-            updateToggle();
         }
+        updateToggle();
     });
 
     function watchShortsSwipe() {
@@ -261,7 +305,7 @@
             font: 500 28px/1 'YouTube Noto', Roboto, Arial, sans-serif;
             padding: 12px 24px;
             border-radius: 8px;
-            z-index: 999999;
+            z-index: 100;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.15s;
@@ -270,8 +314,8 @@
 
         /* Floating speed toggle */
         .yts-toggle {
-            position: fixed;
-            z-index: 999999;
+            position: absolute;
+            z-index: 100;
             background: rgba(0,0,0,0.55);
             color: #fff;
             font: 600 14px/1 'YouTube Noto', Roboto, Arial, sans-serif;
@@ -287,30 +331,39 @@
             touch-action: manipulation;
         }
         .yts-toggle.visible {
-            opacity: 0.7;
+            opacity: 1;
             pointer-events: auto;
+            animation: yts-fade 3s forwards;
+        }
+        @keyframes yts-fade {
+            0%, 80% { opacity: 1; }
+            100% { opacity: 0.7; }
         }
         .yts-toggle.visible:hover,
         .yts-toggle.visible:active {
             opacity: 1;
+            animation: none;
             transform: scale(1.05);
         }
         .yts-toggle.active {
             background: rgba(62,166,255,0.8);
             opacity: 0.9 !important;
+            animation: none;
         }
 
-        /* Shorts position: top right, below action buttons */
+        /* Shorts position: left side to avoid like/comment/share action column */
         .yts-toggle.shorts {
             top: 14px;
-            right: 14px;
+            left: 14px;
+            right: auto;
         }
 
-        /* Regular video position: top right of viewport on mobile,
-           or top right of player on desktop */
+        /* Regular video position: bottom-right near player controls */
         .yts-toggle.video {
-            top: 14px;
+            bottom: 60px;
             right: 14px;
+            top: auto;
+            left: auto;
         }
 
         /* Slightly larger on mobile for easier tapping */
@@ -322,5 +375,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v14 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v15 loaded — stored speed:', getSpeed() + 'x');
 })();
