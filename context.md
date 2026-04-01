@@ -1,32 +1,29 @@
 # context.md
-Last Updated: 2026-03-17 — added TEST_MATRIX.md for mobile fix verification (PRs #9-11)
+Last Updated: 2026-03-31 — v17: mobile + Shorts slider + fullscreen support
 
 ## Current State
-- **v13.0** userscript in `script.js`
+- **v17.0** userscript in `script.js`
 - Desktop keyboard shortcuts (`[`/`]`) for speed control
-- **Mobile speed boost (all videos)**: long press on video area toggles 2x on/off
-- **Mobile Shorts speed boost**: tap left half to activate 2x, tap or long press to deactivate
-  - `getActiveVideo()` targets the correct video element (handles Shorts multi-video DOM and regular player)
-  - 300ms tap threshold, 10px movement threshold, 250ms double-tap guard
-  - Long press (400ms) toggles boost; `gestureConsumed` flag prevents tap-on-release
-  - MutationObserver on Shorts container detects swipe navigation and resets boost state
-  - Updated `isExcludedTarget` selectors for both desktop and mobile YouTube DOM
-  - Persistent overlay with blue accent border when boost is active
-  - Auto-resets on `yt-navigate-finish` and on swipe between Shorts
-- **Settings cog integration**: custom speed panel with 0.25x-8x range, works on both desktop and mobile
-  - Desktop: intercepts `.ytp-settings-menu` click on "Playback speed"
-  - Mobile: intercepts bottom sheet menu items, renders as full-width bottom sheet panel
+- **Floating speed toggle** on all video types (watch, Shorts, fullscreen)
+  - Tap to expand drag slider (1-8x range, 0.25 step snapping)
+  - Quick-select preset chips: 1.25x, 1.5x, 2x, 2.5x, 3x, 4x
+  - Auto-collapses after 3s idle
+  - Works on Shorts (slider replaces old simple 1x/2x toggle)
+- **Mobile support**: matches both `www.youtube.com` and `m.youtube.com`
+  - Toggle positioned above top menu on mobile
+  - Larger touch targets (22px thumb, 16px font)
+  - Mobile container detection: `ytm-player`, `ytm-shorts-player-renderer`
+- **Fullscreen support**: re-injects toggle into fullscreen element on enter/exit
+  - Max z-index (2147483647) ensures visibility over all YouTube overlays
 - Speed persistence via GM_getValue/GM_setValue
-- Uses MutationObserver for video detection and settings menu interception
+- Uses MutationObserver for video detection
 - Ad-aware, SPA-aware
-- All YouTube DOM selectors centralized in `SELECTORS` config object at top of file, grouped by: player, ads, settingsMenu, mobile, shorts, videoPlayer, touchExcluded
-- ~1020 lines, no dependencies, no build step
+- ~780 lines, no dependencies, no build step
 
 ## Open Work
-- Manual testing on mobile Chrome (m.youtube.com) for settings cog bottom sheet interception — YouTube's mobile DOM changes frequently
-- Mobile bottom sheet selectors (`ytm-bottom-sheet-renderer`, `ytm-menu-service-item-renderer`) should be verified against live site
-- Regular video long-press: verify it doesn't conflict with YouTube's native long-press (preview/scrub)
-- TEST_MATRIX.md documents all verification scenarios for the v13 mobile fixes (35 test cases across 5 categories)
+- Manual testing on mobile Chrome (m.youtube.com) for slider interaction
+- Verify Shorts slider doesn't conflict with swipe navigation
+- Test fullscreen slider on both desktop and mobile browsers
 
 ## Environment Notes
 - Tampermonkey userscript, no server, no build, no deploy
@@ -34,4 +31,4 @@ Last Updated: 2026-03-17 — added TEST_MATRIX.md for mobile fix verification (P
 - Auto-updates via `@updateURL` / `@downloadURL` in metadata block
 
 ## Active Branch
-`claude/test-matrix`
+`main`

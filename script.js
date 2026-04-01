@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      16.0
-// @description  Floating speed toggle with expandable slider for Shorts (2x) and regular videos. Desktop keyboard shortcuts ([ / ]). Persists speed across sessions.
+// @version      17.0
+// @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
+// @match        https://m.youtube.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_addStyle
@@ -181,17 +182,19 @@
     }
 
     function expandSlider() {
-        if (isOnShorts()) return; // Shorts keeps simple toggle behavior
         sliderExpanded = true;
         if (!sliderPanel) buildSliderPanel();
         if (toggleEl) {
             toggleEl.classList.add('slider-open');
             // Ensure panel is child of toggle's parent container
-            if (sliderPanel.parentElement !== toggleEl.parentElement) {
-                toggleEl.parentElement.appendChild(sliderPanel);
+            const container = toggleEl.parentElement;
+            if (container && sliderPanel.parentElement !== container) {
+                container.appendChild(sliderPanel);
             }
         }
-        updateSliderPosition(getSpeed());
+        const video = document.querySelector('video');
+        const currentRate = video ? video.playbackRate : getSpeed();
+        updateSliderPosition(currentRate);
         sliderPanel.classList.add('expanded');
         resetSliderIdleTimer();
     }
@@ -422,55 +425,56 @@
         return toggleEl;
     }
 
+    function getPlayerContainer() {
+        // Fullscreen: use the fullscreen element
+        const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        if (fsEl) return fsEl;
+
+        if (isOnShorts()) {
+            // Desktop Shorts
+            const reel = document.querySelector('ytd-reel-video-renderer[is-active]')
+                || document.querySelector('ytd-reel-video-renderer');
+            if (reel) return reel;
+            // Mobile Shorts
+            const mShorts = document.querySelector('ytm-shorts-player-renderer')
+                || document.querySelector('ytm-reel-video-renderer');
+            if (mShorts) return mShorts;
+        }
+
+        // Desktop watch
+        const player = document.querySelector('#movie_player');
+        if (player) return player;
+        // Mobile watch
+        const mPlayer = document.querySelector('ytm-player')
+            || document.querySelector('.html5-video-player');
+        if (mPlayer) return mPlayer;
+
+        return document.body;
+    }
+
     function injectToggle() {
         if (!toggleEl) return;
         collapseSlider();
-        if (isOnShorts()) {
-            const reelContainer = document.querySelector('ytd-reel-video-renderer');
-            if (reelContainer) {
-                reelContainer.style.position = reelContainer.style.position || 'relative';
-                reelContainer.appendChild(toggleEl);
-                return;
-            }
-        } else {
-            const player = document.querySelector('#movie_player');
-            if (player) {
-                player.appendChild(toggleEl);
-                return;
-            }
-        }
-        document.body.appendChild(toggleEl);
+        const container = getPlayerContainer();
+        if (container.style) container.style.position = container.style.position || 'relative';
+        container.appendChild(toggleEl);
     }
 
     function onToggleTap() {
-        if (isOnShorts()) {
-            // Shorts: simple toggle between 1x and boost
-            const boosted = isShortsBoostActive();
-            const speed = boosted ? DEFAULT_SPEED : SHORTS_BOOST;
-            applyToAll(speed);
-            updateToggle();
-            showIndicator(speed);
+        // All video types: tap to expand/collapse slider
+        if (sliderExpanded) {
+            collapseSlider();
         } else {
-            // Watch pages: tap to expand/collapse slider
-            if (sliderExpanded) {
-                collapseSlider();
-            } else {
-                expandSlider();
-            }
+            expandSlider();
         }
     }
 
     function updateToggle() {
         if (!toggleEl) return;
-        if (isOnShorts()) {
-            const boosted = isShortsBoostActive();
-            const speed = boosted ? SHORTS_BOOST : DEFAULT_SPEED;
-            toggleEl.textContent = formatSpeed(speed);
-            toggleEl.classList.toggle('active', boosted);
-        } else {
-            toggleEl.textContent = formatSpeed(getSpeed());
-            toggleEl.classList.toggle('active', getSpeed() > 1.05);
-        }
+        const video = document.querySelector('video');
+        const currentRate = video ? video.playbackRate : getSpeed();
+        toggleEl.textContent = formatSpeed(currentRate);
+        toggleEl.classList.toggle('active', currentRate > 1.05);
     }
 
     function showToggle() {
@@ -507,10 +511,12 @@
 
     const shortsObserver = new MutationObserver(() => {
         if (!isOnShorts()) return;
+        // On Shorts swipe, reset to default and collapse slider
         const video = document.querySelector('video');
-        if (video && Math.abs(video.playbackRate - SHORTS_BOOST) < 0.05) {
+        if (video && video.playbackRate !== DEFAULT_SPEED) {
             applyToAll(DEFAULT_SPEED);
         }
+        collapseSlider();
         updateToggle();
     });
 
@@ -523,6 +529,19 @@
 
     document.addEventListener('yt-navigate-finish', () => setTimeout(watchShortsSwipe, 500));
     setTimeout(onNavigate, 500);
+
+    // ── Fullscreen support ─────────────────────────────────────────
+    function onFullscreenChange() {
+        // Re-inject toggle into the correct container on fullscreen enter/exit
+        if (toggleEl && toggleEl.classList.contains('visible')) {
+            setTimeout(() => {
+                injectToggle();
+                updateToggle();
+            }, 200);
+        }
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
     // ── Styles ──────────────────────────────────────────────────────
     GM_addStyle(`
@@ -546,7 +565,7 @@
         /* Floating speed toggle */
         .yts-toggle {
             position: absolute;
-            z-index: 100;
+            z-index: 2147483647;
             background: rgba(0,0,0,0.55);
             color: #fff;
             font: 600 14px/1 'YouTube Noto', Roboto, Arial, sans-serif;
@@ -601,13 +620,17 @@
             left: auto;
         }
 
-        /* Mobile: move toggle above top menu area */
-        @media (max-width: 768px) {
+        /* Mobile: position toggle above the top-most YouTube controls overlay */
+        @media (max-width: 768px), (hover: none) and (pointer: coarse) {
             .yts-toggle.video {
-                top: 8px;
-                right: 14px;
+                top: 0px;
+                right: 8px;
                 bottom: auto;
                 left: auto;
+            }
+            .yts-toggle.shorts {
+                top: 8px;
+                left: 8px;
             }
         }
 
@@ -622,7 +645,7 @@
         /* ── Slider Panel ────────────────────────────── */
         .yts-slider-panel {
             position: absolute;
-            z-index: 101;
+            z-index: 2147483647;
             background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
@@ -644,12 +667,21 @@
         }
 
         /* Mobile: panel below toggle (toggle is at top) */
-        @media (max-width: 768px) {
+        @media (max-width: 768px), (hover: none) and (pointer: coarse) {
             .yts-slider-panel {
                 bottom: auto;
-                top: 44px;
-                right: 14px;
+                top: 36px;
+                right: 8px;
             }
+        }
+
+        /* Shorts: panel below toggle (toggle is top-left) */
+        .yts-toggle.shorts ~ .yts-slider-panel,
+        .yts-toggle.shorts + .yts-slider-panel {
+            bottom: auto;
+            top: 44px;
+            left: 14px;
+            right: auto;
         }
 
         .yts-slider-label {
@@ -745,5 +777,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v16 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v17 loaded — stored speed:', getSpeed() + 'x');
 })();
