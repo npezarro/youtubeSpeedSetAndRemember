@@ -1,8 +1,8 @@
 # context.md
-Last Updated: 2026-03-31 — v17: mobile + Shorts slider + fullscreen support
+Last Updated: 2026-04-01 — v17.1: mobile positioning swap (shorts top-right, watch top-left)
 
 ## Current State
-- **v17.0** userscript in `script.js`
+- **v17.1** userscript in `script.js`
 - Desktop keyboard shortcuts (`[`/`]`) for speed control
 - **Floating speed toggle** on all video types (watch, Shorts, fullscreen)
   - Tap to expand drag slider (1-8x range, 0.25 step snapping)
@@ -10,7 +10,8 @@ Last Updated: 2026-03-31 — v17: mobile + Shorts slider + fullscreen support
   - Auto-collapses after 3s idle
   - Works on Shorts (slider replaces old simple 1x/2x toggle)
 - **Mobile support**: matches both `www.youtube.com` and `m.youtube.com`
-  - Toggle positioned above top menu on mobile
+  - **Shorts**: toggle top-right, slider panel drops down from right
+  - **Watch/longform**: toggle top-left, slider panel drops down from left
   - Larger touch targets (22px thumb, 16px font)
   - Mobile container detection: `ytm-player`, `ytm-shorts-player-renderer`
 - **Fullscreen support**: re-injects toggle into fullscreen element on enter/exit
@@ -18,7 +19,7 @@ Last Updated: 2026-03-31 — v17: mobile + Shorts slider + fullscreen support
 - Speed persistence via GM_getValue/GM_setValue
 - Uses MutationObserver for video detection
 - Ad-aware, SPA-aware
-- ~780 lines, no dependencies, no build step
+- ~790 lines, no dependencies, no build step
 
 ## Open Work
 - Manual testing on mobile Chrome (m.youtube.com) for slider interaction
