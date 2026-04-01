@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      17.0
+// @version      17.1
 // @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
@@ -620,17 +620,18 @@
             left: auto;
         }
 
-        /* Mobile: position toggle above the top-most YouTube controls overlay */
+        /* Mobile: longform top-left, shorts top-right */
         @media (max-width: 768px), (hover: none) and (pointer: coarse) {
             .yts-toggle.video {
                 top: 0px;
-                right: 8px;
+                left: 8px;
                 bottom: auto;
-                left: auto;
+                right: auto;
             }
             .yts-toggle.shorts {
                 top: 8px;
-                left: 8px;
+                right: 8px;
+                left: auto;
             }
         }
 
@@ -666,22 +667,30 @@
             transform: translateY(0);
         }
 
-        /* Mobile: panel below toggle (toggle is at top) */
+        /* Mobile: panel below toggle (longform toggle is top-left) */
         @media (max-width: 768px), (hover: none) and (pointer: coarse) {
             .yts-slider-panel {
                 bottom: auto;
                 top: 36px;
-                right: 8px;
+                left: 8px;
+                right: auto;
             }
         }
 
-        /* Shorts: panel below toggle (toggle is top-left) */
+        /* Shorts: panel below toggle (toggle is top-right on mobile, top-left on desktop) */
         .yts-toggle.shorts ~ .yts-slider-panel,
         .yts-toggle.shorts + .yts-slider-panel {
             bottom: auto;
             top: 44px;
             left: 14px;
             right: auto;
+        }
+        @media (max-width: 768px), (hover: none) and (pointer: coarse) {
+            .yts-toggle.shorts ~ .yts-slider-panel,
+            .yts-toggle.shorts + .yts-slider-panel {
+                left: auto;
+                right: 8px;
+            }
         }
 
         .yts-slider-label {
@@ -777,5 +786,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v17 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v17.1 loaded — stored speed:', getSpeed() + 'x');
 })();
