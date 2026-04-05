@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      17.1
+// @version      18.0
 // @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
@@ -431,9 +431,11 @@
         if (fsEl) return fsEl;
 
         if (isOnShorts()) {
-            // Desktop Shorts
-            const reel = document.querySelector('ytd-reel-video-renderer[is-active]')
-                || document.querySelector('ytd-reel-video-renderer');
+            // Desktop Shorts — #shorts-player is the visible player; ytd-reel-video-renderer
+            // no longer has [is-active] attribute as of 2026-04
+            const shortsPlayer = document.querySelector('#shorts-player');
+            if (shortsPlayer) return shortsPlayer;
+            const reel = document.querySelector('ytd-reel-video-renderer');
             if (reel) return reel;
             // Mobile Shorts
             const mShorts = document.querySelector('ytm-shorts-player-renderer')
@@ -441,9 +443,9 @@
             if (mShorts) return mShorts;
         }
 
-        // Desktop watch
+        // Desktop watch — only use #movie_player when it's visible (it exists hidden on Shorts too)
         const player = document.querySelector('#movie_player');
-        if (player) return player;
+        if (player && player.offsetHeight > 0) return player;
         // Mobile watch
         const mPlayer = document.querySelector('ytm-player')
             || document.querySelector('.html5-video-player');
@@ -456,7 +458,11 @@
         if (!toggleEl) return;
         collapseSlider();
         const container = getPlayerContainer();
-        if (container.style) container.style.position = container.style.position || 'relative';
+        // Ensure container is positioned so absolute toggle works
+        if (container.style && container !== document.body) {
+            const pos = getComputedStyle(container).position;
+            if (pos === 'static') container.style.position = 'relative';
+        }
         container.appendChild(toggleEl);
     }
 
@@ -521,9 +527,11 @@
     });
 
     function watchShortsSwipe() {
-        const container = document.querySelector('ytd-shorts, ytd-reel-video-renderer')?.parentElement;
+        // ytd-shorts is the parent container for all reels
+        const container = document.querySelector('ytd-shorts')
+            || document.querySelector('ytd-reel-video-renderer')?.parentElement;
         if (container) {
-            shortsObserver.observe(container, { childList: true });
+            shortsObserver.observe(container, { childList: true, subtree: true });
         }
     }
 
@@ -612,9 +620,9 @@
             right: auto;
         }
 
-        /* Regular video position: bottom-right */
+        /* Regular video position: above controls bar */
         .yts-toggle.video {
-            bottom: 60px;
+            bottom: 70px;
             right: 14px;
             top: auto;
             left: auto;
@@ -658,7 +666,7 @@
             transform: translateY(8px);
             transition: opacity 0.2s, transform 0.2s;
             /* Default position: above the toggle, bottom-right */
-            bottom: 90px;
+            bottom: 100px;
             right: 14px;
         }
         .yts-slider-panel.expanded {
@@ -677,9 +685,10 @@
             }
         }
 
-        /* Shorts: panel below toggle (toggle is top-right on mobile, top-left on desktop) */
+        /* Shorts: panel below toggle */
         .yts-toggle.shorts ~ .yts-slider-panel,
-        .yts-toggle.shorts + .yts-slider-panel {
+        .yts-toggle.shorts + .yts-slider-panel,
+        #shorts-player .yts-slider-panel {
             bottom: auto;
             top: 44px;
             left: 14px;
@@ -687,7 +696,8 @@
         }
         @media (max-width: 768px), (hover: none) and (pointer: coarse) {
             .yts-toggle.shorts ~ .yts-slider-panel,
-            .yts-toggle.shorts + .yts-slider-panel {
+            .yts-toggle.shorts + .yts-slider-panel,
+            #shorts-player .yts-slider-panel {
                 left: auto;
                 right: 8px;
             }
@@ -786,5 +796,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v17.1 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v18.0 loaded — stored speed:', getSpeed() + 'x');
 })();
