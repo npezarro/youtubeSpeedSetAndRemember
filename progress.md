@@ -2,6 +2,10 @@
 
 | Date | Type | Description |
 |------|------|-------------|
+| 2026-04-05 | fix | v18.3: mobile Shorts — inject toggle into `.reel-player-overlay-actions` (mobile action bar), discovered via Playwright iPhone 13 emulation |
+| 2026-04-05 | fix | v18.2: mobile container detection — `isMobile()` helper, use `#player-shorts-container`/`#player-container-id` instead of removed `ytm-*` selectors |
+| 2026-04-05 | feat | v18.1: move Shorts toggle to action bar — prepend to `#actions` as first child (above like button), 48px circle style, slider opens to left |
+| 2026-04-05 | fix | v18.0: Shorts toggle not showing — YouTube removed `[is-active]` from `ytd-reel-video-renderer`, use `#shorts-player` instead, skip invisible `#movie_player` on Shorts |
 | 2026-03-17 | docs | Added TEST_MATRIX.md with 35 test scenarios for v13 mobile fixes (PRs #9-11): settings cog bottom sheet, long-press 2x toggle, speed persistence, selector validity, native conflict analysis |
 | 2026-03-17 | refactor | Extracted all hardcoded YouTube DOM selectors into a centralized SELECTORS config object grouped by purpose (player, ads, settings menu, mobile, shorts, touch exclusions) with comments explaining each selector |
 | 2026-03-17 | feat | Added .gitignore for browser extension/userscript project (node_modules, build artifacts, OS files, packaged extensions) |
