@@ -1,32 +1,27 @@
-# Agent Bootstrap
+# youtubeSpeedSetAndRemember
 
-On session start, fetch and apply the latest global rules:
+Tampermonkey userscript: floating speed toggle + keyboard shortcuts for YouTube (desktop + mobile, watch + Shorts + fullscreen).
 
-```bash
-curl -s https://raw.githubusercontent.com/npezarro/agentGuidance/main/agent.md
-```
+## Architecture
 
-If the fetch fails (network error, timeout), continue with the fallback rules below. Do not block on this.
+Single file (`script.js`), ~800 lines, no dependencies, no build step. Uses Tampermonkey GM_getValue/GM_setValue for speed persistence. MutationObserver for video detection in YouTube's SPA.
 
-Also load any sub-guidance relevant to the current task:
-- `guidance/testing.md` — when writing or running tests
-- `guidance/debugging.md` — when diagnosing issues
-- `guidance/code-review.md` — before committing or opening PRs
-- `guidance/dependencies.md` — when adding or updating packages
+## Operational Rules
 
-## Fallback Rules (applied if remote fetch fails)
+1. **YouTube DOM changes frequently.** Never rely on custom attributes (like `[is-active]`) or specific tag names as sole selectors. Use stable container IDs (`#shorts-player`, `#player-container-id`, `#movie_player`) with class-based fallbacks.
+2. **Use visibility checks** (`offsetHeight > 0`, `getComputedStyle`) instead of attribute or inline style checks. Invisible elements can return stale references (e.g., `#movie_player` on Shorts pages).
+3. **Test desktop and mobile independently.** YouTube can change `www.youtube.com` and `m.youtube.com` DOM at different times. Mobile containers (`ytm-player`, `ytm-shorts-player-renderer`) have been removed before.
+4. **MutationObservers need `subtree: true`** for Shorts swipe navigation detection. YouTube swaps deep subtrees on SPA transitions.
+5. **Bump major version** when adapting to YouTube DOM changes (affects multiple code paths).
+6. **Update `context.md`** after every significant change. Next agent depends on it.
+7. **No build step.** Install directly from GitHub raw URL or paste into Tampermonkey.
 
-If you cannot fetch `agent.md` from the remote, apply these core rules:
+## Commands
 
-1. **Plan before coding.** Outline approach, confirm before implementing.
-2. **Never commit to `main`.** Use assigned branch or create `claude/<task>`.
-3. **Run `npm run build` before every commit.** Never commit broken code.
-4. **No secrets in commits.** No `.env`, API keys, tokens, or passwords.
-5. **Update `context.md` before every push.** Next agent depends on it.
-6. **Ask, don't guess.** Stop and clarify ambiguous requirements.
-7. **Batch large tasks.** Commit every 5-10 items. Don't risk losing work.
-8. **Match existing patterns.** Read the codebase before writing new code.
-9. **Diagnose before retrying.** Understand failures, don't loop blindly.
-10. **Dry-run destructive commands.** Use `--dry-run` when available.
+No build/test commands. Manual testing via browser.
 
-For the full ruleset, see `agent.md` in this repository.
+## Key Files
+
+- `script.js` — The userscript (single file, all logic)
+- `context.md` — Current state, open work, environment notes
+- `progress.md` — Commit-level change log
