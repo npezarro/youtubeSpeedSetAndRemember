@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      18.0
+// @version      18.1
 // @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
@@ -457,6 +457,18 @@
     function injectToggle() {
         if (!toggleEl) return;
         collapseSlider();
+
+        // Shorts: inject into the right-side action bar (above like button)
+        if (isOnShorts()) {
+            const actions = document.querySelector('ytd-reel-player-overlay-renderer #actions');
+            if (actions && toggleEl.parentElement !== actions) {
+                actions.insertBefore(toggleEl, actions.firstChild);
+                return;
+            } else if (actions && toggleEl.parentElement === actions) {
+                return; // already in the right place
+            }
+        }
+
         const container = getPlayerContainer();
         // Ensure container is positioned so absolute toggle works
         if (container.style && container !== document.body) {
@@ -613,11 +625,20 @@
             animation: none;
         }
 
-        /* Shorts position */
+        /* Shorts position: inside #actions bar, flow layout */
         .yts-toggle.shorts {
-            top: 14px;
-            left: 14px;
-            right: auto;
+            position: static;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            padding: 0;
+            margin-bottom: 12px;
+            background: rgba(255,255,255,0.15);
+            font-size: 11px;
+            font-weight: 700;
         }
 
         /* Regular video position: above controls bar */
@@ -628,7 +649,7 @@
             left: auto;
         }
 
-        /* Mobile: longform top-left, shorts top-right */
+        /* Mobile: longform top-left */
         @media (max-width: 768px), (hover: none) and (pointer: coarse) {
             .yts-toggle.video {
                 top: 0px;
@@ -636,16 +657,11 @@
                 bottom: auto;
                 right: auto;
             }
-            .yts-toggle.shorts {
-                top: 8px;
-                right: 8px;
-                left: auto;
-            }
         }
 
-        /* Slightly larger on mobile for easier tapping */
+        /* Slightly larger on mobile for easier tapping (not shorts — action bar sized) */
         @media (max-width: 768px), (hover: none) {
-            .yts-toggle {
+            .yts-toggle.video {
                 padding: 8px 14px;
                 font-size: 16px;
             }
@@ -685,22 +701,15 @@
             }
         }
 
-        /* Shorts: panel below toggle */
+        /* Shorts: panel to the left of the action bar */
+        #actions .yts-slider-panel,
         .yts-toggle.shorts ~ .yts-slider-panel,
-        .yts-toggle.shorts + .yts-slider-panel,
-        #shorts-player .yts-slider-panel {
+        .yts-toggle.shorts + .yts-slider-panel {
+            position: absolute;
             bottom: auto;
-            top: 44px;
-            left: 14px;
-            right: auto;
-        }
-        @media (max-width: 768px), (hover: none) and (pointer: coarse) {
-            .yts-toggle.shorts ~ .yts-slider-panel,
-            .yts-toggle.shorts + .yts-slider-panel,
-            #shorts-player .yts-slider-panel {
-                left: auto;
-                right: 8px;
-            }
+            top: 0;
+            right: 60px;
+            left: auto;
         }
 
         .yts-slider-label {
@@ -796,5 +805,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v18.0 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v18.1 loaded — stored speed:', getSpeed() + 'x');
 })();
