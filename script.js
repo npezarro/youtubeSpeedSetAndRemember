@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      18.3
+// @version      19.0
 // @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
@@ -35,9 +35,13 @@
         return isNaN(val) ? DEFAULT_SPEED : Math.min(MAX_SPEED, Math.max(MIN_SPEED, val));
     }
 
+    // Session speed for Shorts: persists across swipes until page leave
+    let sessionSpeed = null;
+
     function setSpeed(rate) {
         const clamped = Math.min(MAX_SPEED, Math.max(MIN_SPEED, rate));
         GM_setValue(SPEED_KEY, clamped);
+        if (isOnShorts()) sessionSpeed = clamped;
         return clamped;
     }
 
@@ -538,29 +542,37 @@
     // ── Page state management ───────────────────────────────────────
     function onNavigate() {
         if (isOnShorts() || isOnWatch()) {
+            if (!isOnShorts()) sessionSpeed = null;
             setTimeout(showToggle, 500);
         } else {
+            sessionSpeed = null;
             hideToggle();
         }
     }
 
     document.addEventListener('yt-navigate-finish', onNavigate);
 
+    let shortsSwipeTimer = null;
     const shortsObserver = new MutationObserver(() => {
         if (!isOnShorts()) return;
-        // On Shorts swipe, reset to default and collapse slider
-        const video = document.querySelector('video');
-        if (video && video.playbackRate !== DEFAULT_SPEED) {
-            applyToAll(DEFAULT_SPEED);
-        }
-        collapseSlider();
-        updateToggle();
+        // Debounce: swipe triggers many mutations
+        clearTimeout(shortsSwipeTimer);
+        shortsSwipeTimer = setTimeout(() => {
+            collapseSlider();
+            if (sessionSpeed !== null) {
+                applyToAll(sessionSpeed);
+            }
+            showToggle();
+        }, 250);
     });
 
     function watchShortsSwipe() {
-        // ytd-shorts is the parent container for all reels
+        // Desktop: ytd-shorts is the parent container for all reels
+        // Mobile: look for the shorts sequence container
         const container = document.querySelector('ytd-shorts')
-            || document.querySelector('ytd-reel-video-renderer')?.parentElement;
+            || document.querySelector('ytm-shorts-player-renderer')?.parentElement
+            || document.querySelector('ytd-reel-video-renderer')?.parentElement
+            || document.querySelector('#shorts-container');
         if (container) {
             shortsObserver.observe(container, { childList: true, subtree: true });
         }
