@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      18.1
+// @version      18.2
 // @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
@@ -54,6 +54,11 @@
 
     function isAdPlaying() {
         return !!(document.querySelector('.ad-showing') || document.querySelector('.ad-interrupting'));
+    }
+
+    function isMobile() {
+        return location.hostname === 'm.youtube.com'
+            || !!document.querySelector('ytm-app');
     }
 
     function isOnShorts() {
@@ -431,23 +436,27 @@
         if (fsEl) return fsEl;
 
         if (isOnShorts()) {
-            // Desktop Shorts — #shorts-player is the visible player; ytd-reel-video-renderer
-            // no longer has [is-active] attribute as of 2026-04
-            const shortsPlayer = document.querySelector('#shorts-player');
-            if (shortsPlayer) return shortsPlayer;
-            const reel = document.querySelector('ytd-reel-video-renderer');
-            if (reel) return reel;
-            // Mobile Shorts
-            const mShorts = document.querySelector('ytm-shorts-player-renderer')
-                || document.querySelector('ytm-reel-video-renderer');
-            if (mShorts) return mShorts;
+            if (isMobile()) {
+                // Mobile Shorts (m.youtube.com) — 2026-04 DOM
+                const mShortsPlayer = document.querySelector('#player-shorts-container')
+                    || document.querySelector('#player-container-id')
+                    || document.querySelector('.player-container');
+                if (mShortsPlayer) return mShortsPlayer;
+            } else {
+                // Desktop Shorts — #shorts-player is the visible player
+                const shortsPlayer = document.querySelector('#shorts-player');
+                if (shortsPlayer) return shortsPlayer;
+                const reel = document.querySelector('ytd-reel-video-renderer');
+                if (reel) return reel;
+            }
         }
 
         // Desktop watch — only use #movie_player when it's visible (it exists hidden on Shorts too)
         const player = document.querySelector('#movie_player');
         if (player && player.offsetHeight > 0) return player;
         // Mobile watch
-        const mPlayer = document.querySelector('ytm-player')
+        const mPlayer = document.querySelector('#player-container-id')
+            || document.querySelector('.player-container')
             || document.querySelector('.html5-video-player');
         if (mPlayer) return mPlayer;
 
@@ -460,13 +469,16 @@
 
         // Shorts: inject into the right-side action bar (above like button)
         if (isOnShorts()) {
+            // Desktop: action bar with like/dislike/share
             const actions = document.querySelector('ytd-reel-player-overlay-renderer #actions');
-            if (actions && toggleEl.parentElement !== actions) {
-                actions.insertBefore(toggleEl, actions.firstChild);
+            if (actions) {
+                if (toggleEl.parentElement !== actions) {
+                    actions.insertBefore(toggleEl, actions.firstChild);
+                }
                 return;
-            } else if (actions && toggleEl.parentElement === actions) {
-                return; // already in the right place
             }
+            // Mobile: no action bar component — overlay on player container
+            // Falls through to generic container injection below
         }
 
         const container = getPlayerContainer();
@@ -625,8 +637,8 @@
             animation: none;
         }
 
-        /* Shorts position: inside #actions bar, flow layout */
-        .yts-toggle.shorts {
+        /* Shorts position: inside desktop #actions bar, flow layout */
+        #actions > .yts-toggle.shorts {
             position: static;
             display: flex;
             align-items: center;
@@ -639,6 +651,14 @@
             background: rgba(255,255,255,0.15);
             font-size: 11px;
             font-weight: 700;
+        }
+
+        /* Shorts position: mobile fallback (absolute overlay, top-right) */
+        .yts-toggle.shorts {
+            top: 12px;
+            right: 12px;
+            bottom: auto;
+            left: auto;
         }
 
         /* Regular video position: above controls bar */
@@ -691,7 +711,7 @@
             transform: translateY(0);
         }
 
-        /* Mobile: panel below toggle (longform toggle is top-left) */
+        /* Mobile: panel below toggle */
         @media (max-width: 768px), (hover: none) and (pointer: coarse) {
             .yts-slider-panel {
                 bottom: auto;
@@ -699,12 +719,17 @@
                 left: 8px;
                 right: auto;
             }
+            /* Mobile Shorts: panel below toggle, right-aligned */
+            .yts-toggle.shorts ~ .yts-slider-panel,
+            .yts-toggle.shorts + .yts-slider-panel {
+                top: 44px;
+                right: 12px;
+                left: auto;
+            }
         }
 
-        /* Shorts: panel to the left of the action bar */
-        #actions .yts-slider-panel,
-        .yts-toggle.shorts ~ .yts-slider-panel,
-        .yts-toggle.shorts + .yts-slider-panel {
+        /* Desktop Shorts: panel to the left of the action bar */
+        #actions .yts-slider-panel {
             position: absolute;
             bottom: auto;
             top: 0;
@@ -805,5 +830,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v18.1 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v18.2 loaded — stored speed:', getSpeed() + 'x');
 })();
