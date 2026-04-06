@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      19.0
+// @version      19.1
 // @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
@@ -103,11 +103,32 @@
         document.querySelectorAll('video').forEach(trackVideo);
     }
 
+    let lastVideoSrc = null;
+    let shortsReinjectTimer = null;
+
     const observer = new MutationObserver(() => {
         scanVideos();
+
+        // Detect toggle orphaned from DOM
         if (toggleEl && !toggleEl.parentElement) {
             collapseSlider();
             injectToggle();
+        }
+
+        // Detect new video (Shorts swipe) — works on all platforms
+        if (isOnShorts()) {
+            const video = document.querySelector('video');
+            const src = video ? (video.src || video.currentSrc) : null;
+            if (src && src !== lastVideoSrc) {
+                lastVideoSrc = src;
+                clearTimeout(shortsReinjectTimer);
+                shortsReinjectTimer = setTimeout(() => {
+                    if (sessionSpeed !== null) {
+                        applyToAll(sessionSpeed);
+                    }
+                    showToggle();
+                }, 300);
+            }
         }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -541,6 +562,7 @@
 
     // ── Page state management ───────────────────────────────────────
     function onNavigate() {
+        lastVideoSrc = null;
         if (isOnShorts() || isOnWatch()) {
             if (!isOnShorts()) sessionSpeed = null;
             setTimeout(showToggle, 500);
