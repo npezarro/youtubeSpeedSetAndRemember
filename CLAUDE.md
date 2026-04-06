@@ -12,7 +12,9 @@ Single file (`script.js`), ~800 lines, no dependencies, no build step. Uses Tamp
 2. **Use visibility checks** (`offsetHeight > 0`, `getComputedStyle`) instead of attribute or inline style checks. Invisible elements can return stale references (e.g., `#movie_player` on Shorts pages).
 3. **Test desktop and mobile independently.** YouTube can change `www.youtube.com` and `m.youtube.com` DOM at different times. Mobile containers (`ytm-player`, `ytm-shorts-player-renderer`) have been removed before.
 4. **MutationObservers need `subtree: true`** for Shorts swipe navigation detection. YouTube swaps deep subtrees on SPA transitions.
-5. **Bump major version** when adapting to YouTube DOM changes (affects multiple code paths).
+5. **Debounce MutationObservers** (250ms) when observing Shorts containers. Swipes trigger many rapid mutations; without debouncing, observers thrash and cause race conditions.
+6. **Session-scoped state via module variables.** Use module-level variables (e.g., `sessionSpeed`) for state that should persist across SPA navigation (Shorts swipes) but reset on page leave. GM_setValue is for persistent cross-session storage only.
+7. **Bump major version** when adapting to YouTube DOM changes (affects multiple code paths).
 6. **Update `context.md`** after every significant change. Next agent depends on it.
 7. **No build step.** Install directly from GitHub raw URL or paste into Tampermonkey.
 
