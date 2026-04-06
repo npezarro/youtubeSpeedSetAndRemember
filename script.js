@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      18.2
+// @version      18.3
 // @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
@@ -469,16 +469,23 @@
 
         // Shorts: inject into the right-side action bar (above like button)
         if (isOnShorts()) {
-            // Desktop: action bar with like/dislike/share
-            const actions = document.querySelector('ytd-reel-player-overlay-renderer #actions');
-            if (actions) {
-                if (toggleEl.parentElement !== actions) {
-                    actions.insertBefore(toggleEl, actions.firstChild);
+            // Desktop: #actions inside overlay renderer
+            const desktopActions = document.querySelector('ytd-reel-player-overlay-renderer #actions');
+            if (desktopActions) {
+                if (toggleEl.parentElement !== desktopActions) {
+                    desktopActions.insertBefore(toggleEl, desktopActions.firstChild);
                 }
                 return;
             }
-            // Mobile: no action bar component — overlay on player container
-            // Falls through to generic container injection below
+            // Mobile (m.youtube.com): .reel-player-overlay-actions
+            const mobileActions = document.querySelector('.reel-player-overlay-actions');
+            if (mobileActions) {
+                if (toggleEl.parentElement !== mobileActions) {
+                    mobileActions.insertBefore(toggleEl, mobileActions.firstChild);
+                }
+                return;
+            }
+            // Fallback: overlay on player container (falls through below)
         }
 
         const container = getPlayerContainer();
@@ -637,8 +644,9 @@
             animation: none;
         }
 
-        /* Shorts position: inside desktop #actions bar, flow layout */
-        #actions > .yts-toggle.shorts {
+        /* Shorts position: inside action bar (desktop #actions or mobile .reel-player-overlay-actions) */
+        #actions > .yts-toggle.shorts,
+        .reel-player-overlay-actions > .yts-toggle.shorts {
             position: static;
             display: flex;
             align-items: center;
@@ -653,7 +661,7 @@
             font-weight: 700;
         }
 
-        /* Shorts position: mobile fallback (absolute overlay, top-right) */
+        /* Shorts position: fallback when not in action bar (absolute overlay) */
         .yts-toggle.shorts {
             top: 12px;
             right: 12px;
@@ -728,8 +736,9 @@
             }
         }
 
-        /* Desktop Shorts: panel to the left of the action bar */
-        #actions .yts-slider-panel {
+        /* Shorts action bar: panel to the left */
+        #actions .yts-slider-panel,
+        .reel-player-overlay-actions .yts-slider-panel {
             position: absolute;
             bottom: auto;
             top: 0;
@@ -830,5 +839,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v18.2 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v18.3 loaded — stored speed:', getSpeed() + 'x');
 })();
