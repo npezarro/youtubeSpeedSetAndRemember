@@ -206,7 +206,7 @@
         clearTimeout(sliderIdleTimer);
         clearTimeout(pointerCaptureTimeout);
         // Release any stuck pointer capture
-        if (sliderThumb && sliderThumb.hasPointerCapture) {
+        if (sliderThumb && sliderThumb._capturedPointerId != null) {
             try { sliderThumb.releasePointerCapture(sliderThumb._capturedPointerId); } catch (_) {}
         }
     }
@@ -441,6 +441,9 @@
         if (toggleEl) return toggleEl;
         toggleEl = document.createElement('div');
         toggleEl.className = 'yts-toggle';
+        toggleEl.setAttribute('role', 'button');
+        toggleEl.setAttribute('tabindex', '0');
+        toggleEl.setAttribute('aria-label', 'Playback speed');
         toggleEl.addEventListener('click', e => {
             e.stopPropagation();
             e.preventDefault();
@@ -452,6 +455,13 @@
             onToggleTap();
         });
         toggleEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+        toggleEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+                e.preventDefault();
+                onToggleTap();
+            }
+        });
         return toggleEl;
     }
 
@@ -536,6 +546,7 @@
         const video = document.querySelector('video');
         const currentRate = video ? video.playbackRate : getSpeed();
         toggleEl.textContent = formatSpeed(currentRate);
+        toggleEl.setAttribute('aria-label', 'Playback speed ' + formatSpeed(currentRate));
         toggleEl.classList.toggle('active', currentRate > 1.05);
     }
 
@@ -628,7 +639,7 @@
             font: 500 28px/1 'YouTube Noto', Roboto, Arial, sans-serif;
             padding: 12px 24px;
             border-radius: 8px;
-            z-index: 100;
+            z-index: 2147483646;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.15s;
@@ -873,5 +884,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v18.3 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v19.1 loaded — stored speed:', getSpeed() + 'x');
 })();
