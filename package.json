@@ -1,0 +1,13 @@
+{
+  "name": "youtube-speed-set-and-remember",
+  "version": "19.1.0",
+  "private": true,
+  "description": "Floating speed toggle with expandable slider for all YouTube video types",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.1"
+  }
+}
