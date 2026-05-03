@@ -31,7 +31,7 @@ Last Updated: 2026-04-05 — v18.3: mobile Shorts fix, action bar injection
 - **Action bar injection** over corner overlay: feels native, stacks with like/dislike/share
 - **Separate desktop/mobile code paths**: DOM structures are fundamentally different (`ytd-*` vs `ytm-*`)
 - **Playwright for mobile testing**: iPhone 13 emulation with GM_* stubs at `/tmp/pw-test/`
-- Full session closeout: `privateContext/deliverables/closeouts/2026-04-05-youtube-speed-shorts-fix.md`
+- Full session closeout: see privateContext/deliverables/closeouts/
 
 ## Open Work
 - Fullscreen toggle on mobile (not tested)
