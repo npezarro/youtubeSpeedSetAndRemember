@@ -2,12 +2,16 @@
   "name": "youtube-speed-set-and-remember",
   "version": "19.1.0",
   "private": true,
+  "type": "module",
   "description": "Floating speed toggle with expandable slider for all YouTube video types",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint ."
   },
   "devDependencies": {
+    "eslint": "^9.39.4",
+    "globals": "^16.5.0",
     "vitest": "^3.1.1"
   }
 }
