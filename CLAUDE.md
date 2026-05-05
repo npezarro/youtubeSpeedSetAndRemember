@@ -21,7 +21,9 @@ Single file (`script.js`), ~800 lines, no dependencies, no build step. Uses Tamp
 
 ## Commands
 
-No build/test commands. Manual testing via browser.
+- Lint: `npm run lint` (ESLint v9 flat config in `eslint.config.js`)
+- Tests: `npm test` (Vitest)
+- CI: GitHub Actions (`.github/workflows/ci.yml`) runs lint + tests on push/PR to `main` (Node 22)
 
 ## Key Files
 
