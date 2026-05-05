@@ -23,7 +23,6 @@
     const MIN_SPEED = 0.25;
     const MAX_SPEED = 8.0;
     const SPEED_STEP = 0.25;
-    const SHORTS_BOOST = 2.0;
     const SLIDER_MIN = 1.0;
     const SLIDER_MAX = 8.0;
     const PRESET_SPEEDS = [1.25, 1.5, 2, 2.5, 3, 4];
@@ -431,11 +430,6 @@
 
     // ── Floating toggle button ──────────────────────────────────────
     let toggleEl = null;
-
-    function isShortsBoostActive() {
-        const video = document.querySelector('video');
-        return video && Math.abs(video.playbackRate - SHORTS_BOOST) < 0.05;
-    }
 
     function createToggle() {
         if (toggleEl) return toggleEl;
