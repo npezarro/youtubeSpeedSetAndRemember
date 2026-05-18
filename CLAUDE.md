@@ -30,3 +30,9 @@ Single file (`script.js`), ~800 lines, no dependencies, no build step. Uses Tamp
 - `script.js` — The userscript (single file, all logic)
 - `context.md` — Current state, open work, environment notes
 - `progress.md` — Commit-level change log
+
+## Tampermonkey Standards
+
+- **Auto-update headers required:** `script.js` must include `@updateURL` and `@downloadURL` pointing at the hosted copy. Without these, Tampermonkey cannot detect updates.
+- **Ship with debug/verbose logging disabled.** Use boolean constants (e.g., `const DEBUG = false`) and gate console output behind them. Never commit with debug flags enabled.
+- **Install page:** When updating this script, update the entry in `~/repos/browser-agent/tm-scripts/index.html` and the source mapping in `sync-tm-scripts.sh`, then run `sync-tm-scripts.sh` to deploy.
