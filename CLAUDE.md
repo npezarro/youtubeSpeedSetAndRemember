@@ -30,3 +30,10 @@ Single file (`script.js`), ~800 lines, no dependencies, no build step. Uses Tamp
 - `script.js` — The userscript (single file, all logic)
 - `context.md` — Current state, open work, environment notes
 - `progress.md` — Commit-level change log
+
+## Tampermonkey Standards
+
+- Every `.user.js` file must include `@updateURL` and `@downloadURL` headers pointing to the hosting domain (not GitHub raw URLs, which require auth for private repos).
+- Bump `@version` on every change so Tampermonkey detects the update.
+- Ship with all debug/verbose logging flags disabled. Use boolean constants (`const DEBUG = false`) and gate console output behind them. Never commit `true` to production.
+- Deploy updated scripts via `~/repos/browser-agent/sync-tm-scripts.sh` to sync to VM hosting.
