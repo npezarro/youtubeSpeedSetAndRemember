@@ -36,3 +36,27 @@ Single file (`script.js`), ~800 lines, no dependencies, no build step. Uses Tamp
 - **Auto-update headers required:** `script.js` must include `@updateURL` and `@downloadURL` pointing at the hosted copy. Without these, Tampermonkey cannot detect updates.
 - **Ship with debug/verbose logging disabled.** Use boolean constants (e.g., `const DEBUG = false`) and gate console output behind them. Never commit with debug flags enabled.
 - **Install page:** When updating this script, update the entry in `~/repos/browser-agent/tm-scripts/index.html` and the source mapping in `sync-tm-scripts.sh`, then run `sync-tm-scripts.sh` to deploy.
+
+## Cross-Cutting Rules (added 2026-05-30)
+
+The rules below were synced from `~/repos/agentGuidance/guidance/tampermonkey.md` for cross-cutting Tampermonkey concerns that weren't already covered above. The YouTube-specific resilience patterns in "Operational Rules" already cover most of `tampermonkey.md` § "YouTube DOM Resilience".
+
+### Platform & Performance
+
+- **For new browser automation scripts, default to Chrome Automation Hub** (`~/repos/chrome-automation`) rather than Tampermonkey. This existing YouTube script stays on Tampermonkey because it predates the hub and the userscript surface works fine here, but any NEW scripts should be ported/written to the hub unless they need `GM_xmlhttpRequest` for CORS bypass, mobile Firefox automation, or a remote-agent orchestration pattern. See `chrome-automation/CLAUDE.md`.
+- **Per-tab sandbox CPU overhead:** Tampermonkey's per-tab sandbox is the reason this script feels heavier than a native extension would. If the script ever expands to match more than YouTube (`*://*/*`) or gains frequent timers, evaluate migrating to an MV3 Chrome extension. In `browser-logs` (April 2026), TM's per-tab overhead accumulated ~14 hours of CPU with only 6 tabs open. The MV3 pattern proved out there: `content.js` (MAIN world) patches page APIs and posts data via `postMessage`; `bridge.js` (ISOLATED world) forwards via `chrome.runtime.sendMessage`; `background.js` is a single service worker with shared timers. Today, YouTube-only matching keeps the cost bounded — but don't broaden the `@match` without considering this.
+
+### Mobile Firefox Compatibility
+
+This script matches `m.youtube.com` and is used on mobile Firefox. The following constraints apply on top of the existing "Operational Rules":
+
+- **IntersectionObserver is unreliable on mobile Firefox for viewport exits.** It doesn't always fire callbacks when elements scroll out of view. If a future feature needs viewport-exit detection (currently the script only relies on navigation via `video.src` change, which is fine), pair the observer with a scroll listener that checks `getBoundingClientRect()` directly.
+- **CSP blocks inline `<script>` injection.** Firefox Android enforces stricter CSP in Tampermonkey contexts. If you need to patch page-level APIs (e.g., intercept `fetch()`), use `unsafeWindow` patching instead of injecting `<script>` tags.
+- **Auth tokens / page globals may not appear passively.** Unlike desktop, mobile browsers may not make authenticated API calls during passive browsing. If a future feature needs YouTube auth state, extract proactively from page globals (e.g., `window.ytInitialPlayerResponse`) or inline script tag contents rather than waiting for network interception.
+
+### Testing & CI
+
+- **Pin Node.js to 22 in CI** (current LTS). Don't use `node-version: 'lts/*'` — it can shift unexpectedly. Node 20 reached EOL on 2026-04-30.
+- **`package-lock.json` must be committed** for `npm ci` + `cache: npm` to work in GitHub Actions.
+- **Test glob quoting on GHA:** Single-quoted globs like `'test/**/*.test.js'` do NOT expand on GitHub Actions because `globstar` is off by default. Use a flat glob or let Vitest find tests via config.
+- **Mock at boundaries** (DOM APIs, MutationObserver, GM_* storage, timers) — not the unit under test. Reset mocks with `beforeEach(() => vi.clearAllMocks())`.
