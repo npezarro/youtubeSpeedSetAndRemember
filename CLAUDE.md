@@ -60,3 +60,12 @@ This script matches `m.youtube.com` and is used on mobile Firefox. The following
 - **`package-lock.json` must be committed** for `npm ci` + `cache: npm` to work in GitHub Actions.
 - **Test glob quoting on GHA:** Single-quoted globs like `'test/**/*.test.js'` do NOT expand on GitHub Actions because `globstar` is off by default. Use a flat glob or let Vitest find tests via config.
 - **Mock at boundaries** (DOM APIs, MutationObserver, GM_* storage, timers) — not the unit under test. Reset mocks with `beforeEach(() => vi.clearAllMocks())`.
+
+## Cross-Cutting Rules — Publishing (added 2026-08-01)
+
+Synced from `~/repos/agentGuidance/guidance/tampermonkey.md` (§ Auto-Update Headers) and `guidance/deployment.md` (§ Publishing Artifacts). The "Tampermonkey Standards" section above already covers the required `@updateURL`/`@downloadURL` headers and the install-page sync step; these two rules cover whether a shipped change actually reaches installed copies.
+
+### Versioning & Publish Verification
+
+- **Bump `@version` on every change, not only on DOM adaptations.** Operational Rule 7 covers *major* bumps for YouTube DOM breakage; separately, Tampermonkey only offers an update when the version served at `@updateURL` is higher than the installed one. Any behavioral fix or tweak shipped without a version bump reaches nobody — the repo looks current while every install keeps running the old script.
+- **A publish is not done until the bytes are verified.** `@updateURL`/`@downloadURL` point at the `main` branch raw URL, so a change publishes nothing until it is merged to `main` — a green PR branch is not a release. After merging, fetch the raw URL cache-busted and assert the `@version` in the response matches the version just committed. A 200 proves only that *something* is at the URL: the raw host is CDN-fronted and will serve a stale copy of the right size, with a passing status code, for minutes after the merge.
