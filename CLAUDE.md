@@ -69,3 +69,41 @@ Synced from `~/repos/agentGuidance/guidance/tampermonkey.md` (§ Auto-Update Hea
 
 - **Bump `@version` on every change, not only on DOM adaptations.** Operational Rule 7 covers *major* bumps for YouTube DOM breakage; separately, Tampermonkey only offers an update when the version served at `@updateURL` is higher than the installed one. Any behavioral fix or tweak shipped without a version bump reaches nobody — the repo looks current while every install keeps running the old script.
 - **A publish is not done until the bytes are verified.** `@updateURL`/`@downloadURL` point at the `main` branch raw URL, so a change publishes nothing until it is merged to `main` — a green PR branch is not a release. After merging, fetch the raw URL cache-busted and assert the `@version` in the response matches the version just committed. A 200 proves only that *something* is at the URL: the raw host is CDN-fronted and will serve a stale copy of the right size, with a passing status code, for minutes after the merge.
+
+## Cross-Cutting Rules — Test the Shipped Artifact (added 2026-08-16)
+
+Synced from `~/repos/agentGuidance/guidance/testing.md`. The "Testing & CI" section above covers CI
+mechanics and mocking; this covers what the suite is actually pointed at, which that section assumes
+rather than states.
+
+### `core.js` is a MIRROR of `script.js`, and the tests only run the mirror
+
+`script.js` is the shipped userscript and imports nothing — Tampermonkey loads one self-contained
+file. `core.js` re-declares the same constants and pure functions "for testing" (its own header says
+"this module mirrors its constants and functions"), and `core.test.js` imports **only** `core.js`. So
+a green suite proves the mirror is correct and says nothing about the file users run.
+
+`testing.md` states the rule directly: **verify the actual artifact and run the real code path, never
+a reimplementation of it.** Testing a rewrite of the logic gives false confidence; the defect lives in
+exactly the seam the tests skip.
+
+The drift is not hypothetical. Measured on `main`: `core.js` exports `SHORTS_BOOST = 2.0` and
+`AD_SELECTORS`, and `core.test.js` asserts on both, while `SHORTS_BOOST` appears **zero times** in
+`script.js`. The suite is green over a constant the userscript does not have.
+
+Rules when touching either file:
+
+- **A change to a shared constant or pure function must land in BOTH files in the same commit.**
+  Treat them as shared-verbatim: edit `script.js`, mirror into `core.js`, and vice versa. Add the new
+  file to "Key Files" thinking, not just the test.
+- **A passing test is evidence about `core.js` only, unless it reads `script.js`.** Prefer a parity
+  check that loads `script.js` as text and asserts the mirrored constants and function bodies match
+  `core.js`, so drift fails the suite instead of hiding inside it. Assert the exact VALUES, not mere
+  presence — asserting that a symbol is present is not asserting that it is correct, and a
+  presence-only check is what lets a reworded or retuned constant through.
+- **A fix that lands in `core.js` alone reaches nobody**, the same way a fix without an `@version`
+  bump reaches nobody (see "Versioning & Publish Verification" above). Both failure modes read
+  identically from the repo: it looks current while every install keeps running the old script.
+- **When you fix a bug, write the regression test against the path that ships.** A test that fails
+  without the fix and passes with it is only a regression test if it exercises `script.js`'s
+  behaviour, not a parallel copy of it.
