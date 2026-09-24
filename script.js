@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Speed Controller
 // @namespace    https://github.com/npezarro/youtubeSpeedSetAndRemember
-// @version      19.1
+// @version      19.2
 // @description  Floating speed toggle with expandable slider for all video types (watch, Shorts, fullscreen). Mobile + desktop. Keyboard shortcuts ([ / ]). Persists speed.
 // @author       npezarro
 // @match        https://www.youtube.com/*
@@ -32,6 +32,23 @@
     function getSpeed() {
         const val = parseFloat(GM_getValue(SPEED_KEY, DEFAULT_SPEED));
         return isNaN(val) ? DEFAULT_SPEED : Math.min(MAX_SPEED, Math.max(MIN_SPEED, val));
+    }
+
+    // The video the user is watching: the first one playing, else the first one.
+    // A page can hold several <video> elements (preloaded Shorts, previews).
+    function getActiveVideo() {
+        const videos = document.querySelectorAll('video');
+        for (const v of videos) if (!v.paused) return v;
+        return videos[0] || null;
+    }
+
+    // Base for relative steps ([ ] and slider arrows): the playing video's rate,
+    // which is what the toggle shows. Mirrors resolveCurrentSpeed() in core.js.
+    function getCurrentSpeed() {
+        const video = getActiveVideo();
+        const rate = video ? video.playbackRate : NaN;
+        if (isAdPlaying() || isNaN(rate) || rate < MIN_SPEED || rate > MAX_SPEED) return getSpeed();
+        return rate;
     }
 
     // Session speed for Shorts: persists across swipes until page leave
@@ -162,7 +179,7 @@
 
         e.preventDefault();
         e.stopPropagation();
-        const s = setSpeed(getSpeed() + delta);
+        const s = setSpeed(getCurrentSpeed() + delta);
         applyToAll(s);
         showIndicator(s);
         updateToggle();
@@ -221,7 +238,7 @@
                 container.appendChild(sliderPanel);
             }
         }
-        const video = document.querySelector('video');
+        const video = getActiveVideo();
         const currentRate = video ? video.playbackRate : getSpeed();
         updateSliderPosition(currentRate);
         sliderPanel.classList.add('expanded');
@@ -398,7 +415,7 @@
 
         // Keyboard support on slider
         sliderThumb.addEventListener('keydown', e => {
-            let speed = getSpeed();
+            let speed = getCurrentSpeed();
             if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
                 speed = Math.min(SLIDER_MAX, speed + SPEED_STEP);
             } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
@@ -537,7 +554,7 @@
 
     function updateToggle() {
         if (!toggleEl) return;
-        const video = document.querySelector('video');
+        const video = getActiveVideo();
         const currentRate = video ? video.playbackRate : getSpeed();
         toggleEl.textContent = formatSpeed(currentRate);
         toggleEl.setAttribute('aria-label', 'Playback speed ' + formatSpeed(currentRate));
@@ -878,5 +895,5 @@
         }
     `);
 
-    console.log('[YT-Speed] v19.1 loaded — stored speed:', getSpeed() + 'x');
+    console.log('[YT-Speed] v19.2 loaded — stored speed:', getSpeed() + 'x');
 })();

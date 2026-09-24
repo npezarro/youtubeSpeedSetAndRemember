@@ -5,7 +5,7 @@ import {
   formatSpeed, clampSpeed, speedToPercent, percentToSpeed,
   isOnShorts, isOnWatch, isMobile,
   getSpeedDelta, shouldIgnoreKeydown,
-  AD_SELECTORS, getSliderKeyDelta,
+  AD_SELECTORS, getSliderKeyDelta, resolveCurrentSpeed,
 } from './core.js';
 
 // ── Config constants ────────────────────────────────────────────
@@ -342,5 +342,41 @@ describe('Speed step arithmetic', () => {
       const formatted = formatSpeed(s);
       expect(formatted).toMatch(/^\d+(\.\d{1,2})?x$/);
     }
+  });
+});
+
+describe('resolveCurrentSpeed', () => {
+  it('steps from the playing rate, not the stored one (Shorts at 1x, stored 2x)', () => {
+    const base = resolveCurrentSpeed(1, 2);
+    expect(base).toBe(1);
+    expect(clampSpeed(base + getSpeedDelta(']'))).toBe(1.25);
+  });
+
+  it('steps down from the playing rate', () => {
+    expect(resolveCurrentSpeed(1.5, 3) + getSpeedDelta('[')).toBe(1.25);
+  });
+
+  it('returns the playing rate when it matches the stored speed', () => {
+    expect(resolveCurrentSpeed(2, 2)).toBe(2);
+  });
+
+  it('falls back to the stored speed while an ad plays', () => {
+    expect(resolveCurrentSpeed(1, 2.5, true)).toBe(2.5);
+  });
+
+  it('falls back to the stored speed when there is no video rate', () => {
+    expect(resolveCurrentSpeed(undefined, 1.75)).toBe(1.75);
+    expect(resolveCurrentSpeed(NaN, 1.75)).toBe(1.75);
+    expect(resolveCurrentSpeed(null, 1.75)).toBe(1.75);
+  });
+
+  it('falls back to the stored speed when the rate is outside the supported range', () => {
+    expect(resolveCurrentSpeed(0.1, 1.5)).toBe(1.5);
+    expect(resolveCurrentSpeed(16, 1.5)).toBe(1.5);
+  });
+
+  it('accepts the range boundaries', () => {
+    expect(resolveCurrentSpeed(MIN_SPEED, 2)).toBe(MIN_SPEED);
+    expect(resolveCurrentSpeed(MAX_SPEED, 2)).toBe(MAX_SPEED);
   });
 });

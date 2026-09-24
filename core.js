@@ -25,6 +25,17 @@ export function clampSpeed(val, min = MIN_SPEED, max = MAX_SPEED, fallback = DEF
     return Math.min(max, Math.max(min, parsed));
 }
 
+// ── Current speed (base for relative steps) ─────────────────────
+// Step from what the video is actually playing, which is also what the toggle
+// shows. The stored speed differs on Shorts (they start at the page's rate and
+// only follow sessionSpeed), so stepping from it jumps e.g. 1x -> 2.25x.
+// Falls back to the stored speed during ads or when the rate is unusable.
+export function resolveCurrentSpeed(videoRate, storedSpeed, adPlaying = false) {
+    if (adPlaying || typeof videoRate !== 'number' || isNaN(videoRate)) return storedSpeed;
+    if (videoRate < MIN_SPEED || videoRate > MAX_SPEED) return storedSpeed;
+    return videoRate;
+}
+
 // ── Slider math ─────────────────────────────────────────────────
 export function speedToPercent(speed) {
     return Math.max(0, Math.min(1, (speed - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)));

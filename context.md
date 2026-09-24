@@ -3,7 +3,7 @@ Last Updated: 2026-04-05 — v18.3: mobile Shorts fix, action bar injection
 
 ## Current State
 - **v18.3** userscript in `script.js`
-- Desktop keyboard shortcuts (`[`/`]`) for speed control
+- Desktop keyboard shortcuts (`[`/`]`) for speed control; they and the slider arrow keys step from the playing video's rate (`getCurrentSpeed()`, v19.2), not the stored speed, so Shorts at 1x step to 1.25x instead of stored+0.25
 - **Floating speed toggle** on all video types (watch, Shorts, fullscreen)
   - Tap to expand drag slider (1-8x range, 0.25 step snapping)
   - Quick-select preset chips: 1.25x, 1.5x, 2x, 2.5x, 3x, 4x
