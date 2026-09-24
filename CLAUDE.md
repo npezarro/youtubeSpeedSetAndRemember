@@ -16,8 +16,9 @@ Single file (`script.js`), ~800 lines, no dependencies, no build step. Uses Tamp
 6. **Session-scoped state via module variables.** Use module-level variables (e.g., `sessionSpeed`) for state that should persist across SPA navigation (Shorts swipes) but reset on page leave. GM_setValue is for persistent cross-session storage only.
 7. **Bump major version** when adapting to YouTube DOM changes (affects multiple code paths).
 8. **Detect navigation via video src change, not container observers.** For Shorts swipe detection, track `video.src || video.currentSrc` changes in the body-level MutationObserver instead of watching for platform-specific container mutations. This works identically on desktop (`ytd-*`) and mobile (`ytm-*`) regardless of DOM structure differences. Debounce (300ms) and compare against a `lastVideoSrc` variable to avoid redundant re-injection.
-9. **Update `context.md`** after every significant change. Next agent depends on it.
-10. **No build step.** Install directly from GitHub raw URL or paste into Tampermonkey.
+9. **Relative speed changes step from the playing rate, not the stored speed.** `[`/`]` and the slider arrows use `getCurrentSpeed()` (active video's rate, stored speed only as fallback), and anything reading "the" video uses `getActiveVideo()` (first playing `<video>`), never bare `querySelector('video')`. The stored speed and the playing rate legitimately differ on Shorts, and a page can hold paused preload videos ahead of the playing one. A control that displays one value and steps from another made `[` speed a 1x Short up to 2.75x (v19.2).
+10. **Update `context.md`** after every significant change. Next agent depends on it.
+11. **No build step.** Install directly from GitHub raw URL or paste into Tampermonkey.
 
 ## Commands
 
