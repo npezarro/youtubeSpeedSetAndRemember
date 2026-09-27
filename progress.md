@@ -2,6 +2,7 @@
 
 | Date | Type | Description |
 |------|------|-------------|
+| 2026-09-24 | fix | v19.2: `[`/`]` and slider arrow keys stepped from the stored speed, not the playing rate the toggle shows. On a 1x Short with 3x stored, `[` jumped to 2.75x. New `getCurrentSpeed()` (core mirror `resolveCurrentSpeed`) steps from the playing rate, falling back to stored during ads or out-of-range rates |
 | 2026-04-05 | fix | v18.3: mobile Shorts — inject toggle into `.reel-player-overlay-actions` (mobile action bar), discovered via Playwright iPhone 13 emulation |
 | 2026-04-05 | fix | v18.2: mobile container detection — `isMobile()` helper, use `#player-shorts-container`/`#player-container-id` instead of removed `ytm-*` selectors |
 | 2026-04-05 | feat | v18.1: move Shorts toggle to action bar — prepend to `#actions` as first child (above like button), 48px circle style, slider opens to left |
